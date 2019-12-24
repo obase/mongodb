@@ -14,7 +14,7 @@ import (
 
 type mongodbClient struct {
 	*mongo.Client
-	Database string
+	DB string
 }
 
 func newMongodbClient(opt *Config) (ret *mongodbClient, err error) {
@@ -104,18 +104,18 @@ func newMongodbClient(opt *Config) (ret *mongodbClient, err error) {
 		return
 	}
 	ret = &mongodbClient{
-		Client:   client,
-		Database: opt.Database,
+		Client: client,
+		DB:     opt.Database,
 	}
 	return
 }
 
-func (client *mongodbClient) Count(c string) (n int, err error) {
-	return
+func (client *mongodbClient) Count(c string) (int64, error) {
+	return client.Client.Database(client.DB).Collection(c).EstimatedDocumentCount(context.Background())
 }
 
 func (client *mongodbClient) CountWith(c string, filter interface{}) (n int64, err error) {
-	return
+	return client.Client.Database(client.DB).Collection(c).CountDocuments(context.Background(), filter)
 }
 
 func (client *mongodbClient) Close() error {

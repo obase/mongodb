@@ -9,8 +9,8 @@ import (
 
 type Client interface {
 	Close() error
-	Count(c string) (n int, err error)
-	CountWith(c string, filter interface{}) (n int64, err error)
+	Count(c string) (int64, error)
+	CountWith(c string, filter interface{}) (int64, error)
 }
 
 // Safe session safety mode. See SetSafe for details on the Safe type.
