@@ -12,10 +12,10 @@ mongo:
     password:
     # 授权, 默认与database相同
     source:
-    # 模式(可选).primary | primaryPreferred | secondary | secondaryPreferred | nearest | eventual | monotonic | strong, 默认为strong
-    model: "Strong"
+    # 模式(可选).primary | primarypreferred | secondary | secondarypreferred | nearest , 默认为primary
+    mode: "primary"
     # 安全(可选).默认值{"W":0, "WMode":"majority", "RMode":"", "WTimeout":0, "FSync":false, "J":false}
-    safe: {"W":0, "WMode":"majority", "RMode":"majority", "WTimeout":0, "FSync":false, "J":false}
+    safe: {"W":0, "WMode":"majority", "RMode":"majority", "WTimeout":0, "J":false}
     # 连接超时(可选). 默认10秒
     connectTimeout: "10s"
     # Keepalive设置(可选). 默认无

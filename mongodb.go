@@ -1,42 +1,87 @@
 package mongodb
 
-import "time"
+import (
+	"errors"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
+	"strings"
+	"time"
+)
 
-/*
-客户端选项
-*/
-
-type WriteConcernOption struct {
-	J         bool          `json:"J" bson:"J" yaml:"J"`
-	W         int           `json:"W" bson:"W" yaml:"W"`
-	WMajority bool          `json:"WMajority" bson:"WMajority" yaml:"WMajority"`
-	WTagSet   string        `json:"WTagSet" bson:"WTagSet" yaml:"WTagSet"`
-	WTimeout  time.Duration `json:"WTimeout" bson:"WTimeout" yaml:"WTimeout"`
+type Client interface {
+	Close() error
+	Count(c string) (n int, err error)
+	CountWith(c string, filter interface{}) (n int64, err error)
 }
 
-type Option struct {
-	Key                     string             `json:"key" bson:"key" yaml:"key"`
-	Address                 []string           `json:"address" bson:"address" yaml:"address"`
-	Source                  string             `json:"source" bson:"source" yaml:"source"`
-	Username                string             `json:"username" bson:"username" yaml:"username"`
-	Password                string             `json:"password" bson:"password" yaml:"password"`
-	AuthMechanism           string             `json:"authMechanism" bson:"authMechanism" yaml:"authMechanism"`
-	AuthMechanismProperties map[string]string  `json:"authMechanismProperties" bson:"authMechanismProperties" yaml:"authMechanismProperties"`
-	Compressors             []string           `json:"compressors" bson:"compressors" yaml:"compressors"` // zstd, zlib, snappy
-	ConnectTimeout          time.Duration      `json:"connectTimeout" bson:"connectTimeout" yaml:"connectTimeout"`
-	Keepalive               time.Duration      `json:"keepalive" bson:"keepalive" yaml:"keepalive"`
-	ConnectDirect           bool               `json:"connectDirect" bson:"connectDirect" yaml:"connectDirect"` // 是否直接连接. 如果是仅限于connect_string指定的hosts,否则会尝试与集群交互发现
-	HeartbeatInterval       time.Duration      `json:"heartbeatInterval" bson:"heartbeatInterval" yaml:"heartbeatInterval"`
-	LocalThreshold          time.Duration      `json:"localThreshold" bson:"localThreshold" yaml:"localThreshold"`
-	MaxConnIdleTime         time.Duration      `json:"maxConnIdleTime" bson:"maxConnIdleTime" yaml:"maxConnIdleTime"`
-	MaxPoolSize             uint64             `json:"maxPoolSize" bson:"maxPoolSize" yaml:"maxPoolSize"`
-	MinPoolSize             uint64             `json:"minPoolSize" bson:"minPoolSize" yaml:"minPoolSize"`
-	ReadConcern             string             `json:"readConcern" bson:"readConcern" yaml:"readConcern"` // local, majority
-	ReadPreference          string             `json:"readPreference" bson:"readPreference" yaml:"readPreference"`
-	ReplicaSet              string             `json:"replicaSet" bson:"replicaSet" yaml:"replicaSet"`
-	RetryReads              bool               `json:"retryReads" bson:"retryReads" yaml:"retryReads"`
-	RetryWrites             bool               `json:"retryWrites" bson:"retryWrites" yaml:"retryWrites"`
-	ServerSelectionTimeout  time.Duration      `json:"serverSelectionTimeout" bson:"serverSelectionTimeout" yaml:"serverSelectionTimeout"`
-	SocketTimeout           time.Duration      `json:"socketTimeout" bson:"socketTimeout" yaml:"socketTimeout"`
-	WriteConcern            WriteConcernOption `json:"writeConcern" bson:"writeConcern" yaml:"writeConcern"` // local, majority
+// Safe session safety mode. See SetSafe for details on the Safe type.
+type Safe struct {
+	W        int    // Min # of servers to ack before success
+	WMode    string // Write mode for MongoDB 2.0+ (e.g. "majority")
+	RMode    string // Read mode for MonogDB 3.2+ ("majority", "local", "linearizable")
+	WTimeout int    // Milliseconds to wait for W before timing out
+	FSync    bool   // Sync via the journal if present, or via data files sync otherwise
+	J        bool   // Sync via the journal if present
+}
+
+type Config struct {
+	// 连接URL, 格式为[mongodb://][user:pass@]host1[:port1][,host2[:port2],...][/database][?options]
+	Address     []string
+	Database    string
+	Username    string
+	Password    string
+	Source      string
+	Safe        *Safe
+	Mode        readpref.Mode
+	Compressors []string
+
+	// 连接管理
+	ConnectTimeout time.Duration //连接超时. 默认为10秒
+	Keepalive      time.Duration //DialInfo.DialServer实现
+	WriteTimeout   time.Duration //写超时, 默认为ConnectTimeout
+	ReadTimeout    time.Duration //读超时, 默认为ConnectTimeout
+
+	// 连接池管理
+	MinPoolSize       int //对应DialInfo.MinPoolSize
+	MaxPoolSize       int //对应DialInfo.PoolLimit
+	MaxPoolWaitTimeMS int //对应DialInfo.PoolTimeout获取连接超时, 默认为0永不超时
+	MaxPoolIdleTimeMS int //对应DialInfo.MaxIdleTimeMS
+}
+
+var (
+	clients map[string]Client = make(map[string]Client)
+)
+
+func mergeConfig(opt *Config) *Config {
+	if opt == nil {
+		opt = new(Config)
+	}
+	return opt
+}
+
+func Setup(key string, cnf *Config) (err error) {
+
+	client, err := newMongodbClient(mergeConfig(cnf))
+	if err != nil {
+		return
+	}
+	for _, k := range strings.Split(key, ",") {
+		k = strings.TrimSpace(k)
+		if _, ok := clients[k]; ok {
+			return errors.New("duplicate mongodb client: " + k)
+		}
+		clients[k] = client
+	}
+	return
+}
+
+func Get(key string) Client {
+	return clients[key]
+}
+
+func Must(key string) Client {
+	ret, ok := clients[key]
+	if !ok {
+		panic("missing mongodb client: " + key)
+	}
+	return ret
 }

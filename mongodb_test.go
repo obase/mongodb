@@ -1,10 +1,10 @@
 package mongodb
 
-import (
-	"go.mongodb.org/mongo-driver/mongo/options"
-	"testing"
-)
+import "testing"
 
-func TestDemo(t *testing.T) {
-	opts := options.Client().SetAuth()
+func TestGet(t *testing.T) {
+	 mdb := Must("test")
+	 defer mdb.Close()
+
+
 }
