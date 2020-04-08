@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-const CKEY = "mongo"
+const CKEY = "mongodb"
 
 // 对接conf.yml, 读取原redis相关配置
 func init() {
