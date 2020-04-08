@@ -7,9 +7,8 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/readconcern"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 	"go.mongodb.org/mongo-driver/mongo/writeconcern"
+	"go.mongodb.org/mongo-driver/tag"
 	"net"
-	"strings"
-	"time"
 )
 
 type mongodbClient struct {
@@ -29,12 +28,79 @@ func newMongodbClient(opt *Config) (ret *mongodbClient, err error) {
 		if opt.Source != "" {
 			auth.AuthSource = opt.Source
 		} else {
-			auth.AuthSource = opt.Database
+			auth.AuthSource = "admin"
 		}
 		opts.SetAuth(auth)
 	}
-	if len(opt.Compressors) > 0 {
-		opts.SetCompressors(opt.Compressors)
+
+	if opt.ReadPreference != nil {
+
+		var rpopts []readpref.Option
+		if size := len(opt.ReadPreference.RTagSet); size > 0 {
+			var set tag.Set
+			for k, v := range opt.ReadPreference.RTagSet {
+				set = append(set, tag.Tag{
+					Name:  k,
+					Value: v,
+				})
+			}
+			rpopts = append(rpopts, readpref.WithTagSets(set))
+		}
+		if opt.ReadPreference.RMaxStateness > 0 {
+			rpopts = append(rpopts, readpref.WithMaxStaleness(opt.ReadPreference.RMaxStateness))
+		}
+
+		switch opt.ReadPreference.RMode {
+		case ReadPreference_primary:
+			opts.SetReadPreference(readpref.Primary())
+		case ReadPreference_primaryPreferred:
+			opts.SetReadPreference(readpref.PrimaryPreferred(rpopts...))
+		case ReadPreference_secondary:
+			opts.SetReadPreference(readpref.Secondary(rpopts...))
+		case ReadPreference_secondaryPreferred:
+			opts.SetReadPreference(readpref.SecondaryPreferred(rpopts...))
+		case ReadPreference_nearest:
+			opts.SetReadPreference(readpref.Nearest(rpopts...))
+		}
+	}
+
+	if opt.ReadConcern != nil {
+		switch opt.ReadConcern.Level {
+		case ReadConcern_available:
+			opts.SetReadConcern(readconcern.Available())
+		case ReadConcern_local:
+			opts.SetReadConcern(readconcern.Local())
+		case ReadConcern_majority:
+			opts.SetReadConcern(readconcern.Majority())
+		case ReadConcern_linerizable:
+			opts.SetReadConcern(readconcern.Linearizable())
+		}
+	}
+
+	if opt.WriteConcern != nil {
+		var wcopts []writeconcern.Option
+		if opt.WriteConcern.WMajority {
+			wcopts = append(wcopts, writeconcern.WMajority())
+		} else {
+			wcopts = append(wcopts, writeconcern.W(opt.WriteConcern.W))
+		}
+
+		if opt.WriteConcern.J {
+			wcopts = append(wcopts, writeconcern.J(true))
+		}
+		if opt.WriteConcern.WTagSet != "" {
+			wcopts = append(wcopts, writeconcern.WTagSet(opt.WriteConcern.WTagSet))
+		}
+		if opt.WriteConcern.WTimeout > 0 {
+			wcopts = append(wcopts, writeconcern.WTimeout(opt.WriteConcern.WTimeout))
+		}
+		opts.SetWriteConcern(writeconcern.New(wcopts...))
+	}
+
+	opts.SetDirect(true)
+
+	if opt.ReplicaSet != "" {
+		opts.SetReplicaSet(opt.ReplicaSet)
 	}
 
 	if opt.Keepalive > 0 {
@@ -48,56 +114,46 @@ func newMongodbClient(opt *Config) (ret *mongodbClient, err error) {
 		opts.SetConnectTimeout(opt.ConnectTimeout)
 	}
 
-	socketTimeout := opt.ReadTimeout
-	if socketTimeout < opt.WriteTimeout {
-		socketTimeout = opt.WriteTimeout
-	}
-	if socketTimeout > 0 {
-		opts.SetSocketTimeout(socketTimeout)
+	if opt.ServerSelectionTimeout > 0 {
+		opts.SetServerSelectionTimeout(opt.ServerSelectionTimeout)
 	}
 
-	if opt.MaxPoolIdleTimeMS > 0 {
-		opts.SetMaxConnIdleTime(time.Duration(opt.MaxPoolIdleTimeMS) * time.Millisecond)
+	if opt.SocketTimeout > 0 {
+		opts.SetSocketTimeout(opt.SocketTimeout)
+	}
+
+	if opt.HeartbeatInterval > 0 {
+		opts.SetHeartbeatInterval(opt.HeartbeatInterval)
+	}
+
+	if opt.LocalThreshold > 0 {
+		opts.SetLocalThreshold(opt.LocalThreshold)
+	}
+
+	if opt.MinPoolSize > 0 {
+		opts.SetMinPoolSize(opt.MinPoolSize)
 	}
 	if opt.MaxPoolSize > 0 {
-		opts.SetMaxPoolSize(uint64(opt.MaxPoolSize))
+		opts.SetMaxPoolSize(opt.MaxPoolSize)
 	}
-	if opt.MinPoolSize > 0 {
-		opts.SetMinPoolSize(uint64(opt.MinPoolSize))
-	}
-	if opt.MaxPoolWaitTimeMS > 0 {
-		opts.SetServerSelectionTimeout(time.Duration(opt.MaxPoolWaitTimeMS) * time.Millisecond)
+	if opt.MaxConnIdleTime > 0 {
+		opts.SetMaxConnIdleTime(opt.MaxConnIdleTime)
 	}
 
-	if opt.Mode > 0 {
-		var pref *readpref.ReadPref
-		if pref, err = readpref.New(opt.Mode); err != nil {
-			return
-		}
-		opts.SetReadPreference(pref)
+	if len(opt.Compressors) > 0 {
+		opts.SetCompressors(opt.Compressors)
 	}
 
-	if opt.Safe != nil {
-
-		if opt.Safe.RMode != "" {
-			opts.SetReadConcern(readconcern.New(readconcern.Level(strings.ToLower(opt.Safe.RMode))))
-		}
-
-		var ops []writeconcern.Option
-		if opt.Safe.J {
-			ops = append(ops, writeconcern.J(true))
-		}
-		if opt.Safe.W > 0 {
-			ops = append(ops, writeconcern.W(opt.Safe.W))
-		}
-		if strings.ToLower(opt.Safe.WMode) == "majority" {
-			ops = append(ops, writeconcern.WMajority())
-		}
-		if opt.Safe.WTimeout > 0 {
-			ops = append(ops, writeconcern.WTimeout(time.Duration(opt.Safe.WTimeout)*time.Millisecond))
-		}
-		opts.SetWriteConcern(writeconcern.New(ops...))
+	if opt.ZlibLevel > 0 {
+		opts.SetZlibLevel(opt.ZlibLevel)
 	}
+
+	if opt.ZstdLevel > 0 {
+		opts.SetZstdLevel(opt.ZstdLevel)
+	}
+
+	opts.SetRetryReads(opt.RetryReads)
+	opts.SetRetryWrites(opt.RetryWrites)
 
 	client, err := mongo.Connect(context.Background(), opts)
 	if err != nil {

@@ -3,7 +3,7 @@ package mongodb
 import (
 	"fmt"
 	"github.com/obase/conf"
-	"go.mongodb.org/mongo-driver/mongo/readpref"
+	"strings"
 )
 
 const CKEY = "mongo"
@@ -24,35 +24,54 @@ func init() {
 			username, _ := conf.ElemString(config, "username")
 			password, _ := conf.ElemString(config, "password")
 			source, _ := conf.ElemString(config, "source")
-			compressors, _ := conf.ElemStringSlice(config, "compressors")
-			safe, _ := getSafe(conf.ElemMap(config, "safe"))
-			mode, _ := getMode(conf.Elem(config, "mode"))
+			readPreference, _ := GetReadPreference(conf.Elem(config, "readPreference"))
+			readConcern, _ := GetReadConcern(conf.Elem(config, "readConcern"))
+			writeConcern, _ := GetWriteConcern(conf.Elem(config, "writeConcern"))
+
+			direct, _ := conf.ElemBool(config, "direct")
+			replicaSet, _ := conf.ElemString(config, "replicaSet")
 			keepalive, _ := conf.ElemDuration(config, "keepalive")
 			connectTimeout, _ := conf.ElemDuration(config, "connectTimeout")
-			readTimeout, _ := conf.ElemDuration(config, "readTimeout")
-			writeTimeout, _ := conf.ElemDuration(config, "writeTimeout")
-			minPoolSize, _ := conf.ElemInt(config, "minPoolSize")
-			maxPoolSize, _ := conf.ElemInt(config, "maxPoolSize")
-			maxPoolWaitTimeMS, _ := conf.ElemInt(config, "maxPoolWaitTimeMS")
-			maxPoolIdleTimeMS, _ := conf.ElemInt(config, "maxPoolIdleTimeMS")
+			serverSelectionTimeout, _ := conf.ElemDuration(config, "serverSelectionTimeout")
+			socketTimeout, _ := conf.ElemDuration(config, "socketTimeout")
+			heartbeatInterval, _ := conf.ElemDuration(config, "heartbeatInterval")
+			localThreshold, _ := conf.ElemDuration(config, "localThreshold")
+
+			minPoolSize, _ := conf.ElemInt64(config, "minPoolSize")
+			maxPoolSize, _ := conf.ElemInt64(config, "maxPoolSize")
+			maxConnIdleTime, _ := conf.ElemDuration(config, "maxConnIdleTime")
+
+			compressors, _ := conf.ElemStringSlice(config, "compressors")
+			zlibLevel, _ := conf.ElemInt(config, "zlibLevel")
+			zstdLevel, _ := conf.ElemInt(config, "zstdLevel")
+			retryReads, _ := conf.ElemBool(config, "retryReads")
+			retryWrites, _ := conf.ElemBool(config, "retryWrites")
 
 			if err := Setup(key, &Config{
-				Address:           address,
-				Database:          database,
-				Username:          username,
-				Password:          password,
-				Source:            source,
-				Compressors:       compressors,
-				Safe:              safe,
-				Mode:              mode,
-				Keepalive:         keepalive,
-				ConnectTimeout:    connectTimeout,
-				ReadTimeout:       readTimeout,
-				WriteTimeout:      writeTimeout,
-				MinPoolSize:       minPoolSize,
-				MaxPoolSize:       maxPoolSize,
-				MaxPoolWaitTimeMS: maxPoolWaitTimeMS,
-				MaxPoolIdleTimeMS: maxPoolIdleTimeMS,
+				Address:                address,
+				Database:               database,
+				Username:               username,
+				Password:               password,
+				Source:                 source,
+				ReadPreference:         readPreference,
+				ReadConcern:            readConcern,
+				WriteConcern:           writeConcern,
+				Direct:                 direct,
+				ReplicaSet:             replicaSet,
+				Keepalive:              keepalive,
+				ConnectTimeout:         connectTimeout,
+				ServerSelectionTimeout: serverSelectionTimeout,
+				SocketTimeout:          socketTimeout,
+				HeartbeatInterval:      heartbeatInterval,
+				LocalThreshold:         localThreshold,
+				MinPoolSize:            uint64(minPoolSize),
+				MaxPoolSize:            uint64(maxPoolSize),
+				MaxConnIdleTime:        maxConnIdleTime,
+				Compressors:            compressors,
+				ZlibLevel:              zlibLevel,
+				ZstdLevel:              zstdLevel,
+				RetryReads:             retryReads,
+				RetryWrites:            retryWrites,
 			}); err != nil {
 				panic(err)
 			}
@@ -60,44 +79,99 @@ func init() {
 	}
 }
 
-func getMode(val interface{}, ok bool) (readpref.Mode, bool) {
-	if !ok {
-		return readpref.PrimaryMode, false
-	}
+func GetReadPreference(val interface{}, ok bool) (*ReadPreference, bool) {
 	switch val := val.(type) {
 	case string:
-		ret, err := readpref.ModeFromString(val)
-		if err != nil {
-			return readpref.PrimaryMode, false
+		return &ReadPreference{RMode: val}, true
+	case map[string]interface{}:
+		return &ReadPreference{
+			RMode:         conf.ToString(val["RMode"]),
+			RTagSet:       conf.ToStringMap(val["RTagSet"]),
+			RMaxStateness: conf.ToDuration(val["RMaxStateness"]),
+		}, true
+	case map[interface{}]interface{}:
+		ret := new(ReadPreference)
+		for k, v := range val {
+			switch conf.ToString(k) {
+			case "RMode":
+				ret.RMode = conf.ToString(v)
+			case "RTagSet":
+				ret.RTagSet = conf.ToStringMap(v)
+			case "RMaxStateness":
+				ret.RMaxStateness = conf.ToDuration(v)
+			}
 		}
 		return ret, true
-	case int:
-		return readpref.Mode(val), true
-	case int64:
-		return readpref.Mode(val), true
+	default:
+		panic(fmt.Sprintf("invalid value for read preference: %v", val))
 	}
-	panic("unsupport mode type: " + fmt.Sprint(val))
 }
 
-func getSafe(val map[string]interface{}, ok bool) (*Safe, bool) {
-	safe := &Safe{
-		WMode: "majority",
-	}
-	for k, v := range val {
-		switch k {
-		case "W", "w":
-			safe.W = conf.ToInt(v)
-		case "WMode", "wmode":
-			safe.WMode = conf.ToString(v)
-		case "RMode", "rmode":
-			safe.RMode = conf.ToString(v)
-		case "WTimeout", "wtimeout":
-			safe.WTimeout = conf.ToInt(v)
-		case "FSync", "fsync":
-			safe.FSync = conf.ToBool(v)
-		case "J", "j":
-			safe.J = conf.ToBool(v)
+func GetReadConcern(val interface{}, ok bool) (*ReadConcern, bool) {
+	switch val := val.(type) {
+	case string:
+		return &ReadConcern{Level: val}, true
+	case map[string]interface{}:
+		return &ReadConcern{
+			Level: conf.ToString(val["Level"]),
+		}, true
+	case map[interface{}]interface{}:
+		ret := new(ReadConcern)
+		for k, v := range val {
+			switch conf.ToString(k) {
+			case "Level":
+				ret.Level = conf.ToString(v)
+			}
 		}
+		return ret, true
+	default:
+		panic(fmt.Sprintf("invalid value for read concern: %v", val))
 	}
-	return safe, true
+}
+
+func GetWriteConcern(val interface{}, ok bool) (*WriteConcern, bool) {
+	switch val := val.(type) {
+	case string:
+		switch strings.ToLower(val) {
+		case WriteConcern_majority:
+			return &WriteConcern{WMajority: true}, true
+		case WriteConcern_w0:
+			return &WriteConcern{W: 0}, true
+		case WriteConcern_w1:
+			return &WriteConcern{W: 1}, true
+		case WriteConcern_w2:
+			return &WriteConcern{W: 2}, true
+		case WriteConcern_w3:
+			return &WriteConcern{W: 3}, true
+		default:
+			panic(fmt.Sprintf("invalid value for write concern: %v", val))
+		}
+	case map[string]interface{}:
+		return &WriteConcern{
+			WMajority: conf.ToBool(val["WMajority"]),
+			W:         conf.ToInt(val["W"]),
+			J:         conf.ToBool(val["J"]),
+			WTagSet:   conf.ToString(val["WTagSet"]),
+			WTimeout:  conf.ToDuration(val["WTimeout"]),
+		}, true
+	case map[interface{}]interface{}:
+		ret := new(WriteConcern)
+		for k, v := range val {
+			switch conf.ToString(k) {
+			case "J":
+				ret.J = conf.ToBool(v)
+			case "W":
+				ret.W = conf.ToInt(v)
+			case "WMajority":
+				ret.WMajority = conf.ToBool(v)
+			case "WTagSet":
+				ret.WTagSet = conf.ToString(v)
+			case "WTimeout":
+				ret.WTimeout = conf.ToDuration(v)
+			}
+		}
+		return ret, true
+	default:
+		panic(fmt.Sprintf("invalid value for read concern: %v", val))
+	}
 }
