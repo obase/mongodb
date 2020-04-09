@@ -1,4 +1,4 @@
-module github.com/obase/mongo
+module github.com/obase/mongodb
 
 go 1.12
 
