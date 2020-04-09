@@ -7,9 +7,9 @@ import (
 )
 
 func TestGet(t *testing.T) {
-	 mdb := Must("test")
-	 defer mdb.Close()
+	mdb := Must("test")
+	defer mdb.Close()
 
-	fmt.Println(mdb.CountWith("zj_event_changed", bson.M{"_id":"11112"}))
+	fmt.Println(mdb.Collection("zj_event_changed").CountDocuments(nil, bson.M{"_id": "11112"}))
 
 }

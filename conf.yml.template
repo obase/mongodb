@@ -1,17 +1,17 @@
-mongo:
+mongodb:
   -
     # 主键(string).多值用逗号分隔
     key: test
     # 地址(string).多值用逗号分隔
-    address: 127.0.0.1:27017
+    address: 10.11.165.44:27017
     # 数据库(string).默认数据库
     database: jx3robot
     # 用户名(string).
-    username:
+    username: admin
     # 密码(string).
-    password:
+    password: mongo@kingsoft.com
     # 授权源(string), 默认admin
-    source:
+    source: admin
     # 读优先(string或{RMode string; RTagSet map[string]string; RMaxStateness time.Duration}): primary | primarypreferred | secondary | secondarypreferred | nearest, 默认由server端决定
     readPreference: primary
     # 读安全(string或{Level string}): majority | local, 默认由server端决定
@@ -33,7 +33,7 @@ mongo:
     # 心跳间隔(time.Duration), 默认10秒
     heartbeatInterval: 10s
     # 延迟窗口(time.Duration), 默认15毫秒
-    heartbeatInterval: 15ms
+    localThreshold: 15ms
     # 最小连接数(uint64), 默认0
     minPoolSize: 0
     # 最大连接数(uint64), 默认0表示无限

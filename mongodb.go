@@ -85,7 +85,7 @@ type Config struct {
 }
 
 var (
-	clients map[string]Client = make(map[string]Client)
+	clients map[string]*Client = make(map[string]*Client)
 )
 
 func mergeConfig(opt *Config) *Config {
@@ -111,11 +111,11 @@ func Setup(key string, cnf *Config) (err error) {
 	return
 }
 
-func Get(key string) Client {
+func Get(key string) *Client {
 	return clients[key]
 }
 
-func Must(key string) Client {
+func Must(key string) *Client {
 	ret, ok := clients[key]
 	if !ok {
 		panic("missing mongodb client: " + key)
