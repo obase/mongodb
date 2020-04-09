@@ -1,35 +1,52 @@
 mongo:
   -
-    # 引用的key(必需)
+    # 主键(string).多值用逗号分隔
     key: test
-    # 地址(必需). 多值用逗号分隔
-    address: "127.0.0.1:27017"
-    # DB名字(必需)
+    # 地址(string).多值用逗号分隔
+    address: 127.0.0.1:27017
+    # 数据库(string).默认数据库
     database: jx3robot
-    # 用户名(可选)
+    # 用户名(string).
     username:
-    # 密码(可选)
+    # 密码(string).
     password:
-    # 授权, 默认与database相同
+    # 授权源(string), 默认admin
     source:
-    # 模式(可选).primary | primarypreferred | secondary | secondarypreferred | nearest , 默认为primary
-    mode: "primary"
-    # 安全(可选).默认值{"W":0, "WMode":"majority", "RMode":"", "WTimeout":0, "FSync":false, "J":false}
-    safe: {"W":0, "WMode":"majority", "RMode":"majority", "WTimeout":0, "J":false}
-    # 连接超时(可选). 默认10秒
-    connectTimeout: "10s"
-    # Keepalive设置(可选). 默认无
-    keepalive:
-    # 读超时(可选). 默认无
-    readTimeout:
-    # 写超时(可选). 默认无
-    writeTimeout:
-    # 连接池最小数量(可选)
+    # 读优先(string或{RMode string; RTagSet map[string]string; RMaxStateness time.Duration}): primary | primarypreferred | secondary | secondarypreferred | nearest, 默认由server端决定
+    readPreference: primary
+    # 读安全(string或{Level string}): majority | local, 默认由server端决定
+    readConcern: majority
+    # 写安全(string或{WMajority bool; W int; J bool; WTagSet string; WTimeout time.Duration}): majority | w3 | w2 | w1 | w0, 默认由server端决定
+    writeConcern: majority
+    # 是否直连(bool), true | false, 默认false
+    direct: false
+    # 指定副本
+    replicaSet:
+    # keepalive(time.Duration), 默认300秒
+    keepalive: 300s
+    # 连接超时(time.Duration), 默认10秒
+    connectTimeout: 10s
+    # 服务端选择超时(time.Duration), 默认30秒
+    serverSelectionTimeout: 30s
+    # 读写超时(time.Duration), 默认0表示永远不超时
+    socketTimeout: 0
+    # 心跳间隔(time.Duration), 默认10秒
+    heartbeatInterval: 10s
+    # 延迟窗口(time.Duration), 默认15毫秒
+    heartbeatInterval: 15ms
+    # 最小连接数(uint64), 默认0
     minPoolSize: 0
-    # 连接池最大数量(可选)
+    # 最大连接数(uint64), 默认0表示无限
     maxPoolSize: 0
-    # 连接池最大等待毫秒(可选). 默认0阻塞
-    maxPoolWaitTimeMS: 0
-    # 连接池最大空闲毫秒(可选)
-    maxPoolIdleTimeMS: 0
-    default: true
+    # 最大连接闲置(time.Duration), 默认0表示无限
+    maxConnIdleTime: 0
+    # 压缩通信(string或[]string), snappy(3.4) | zlib(3.6) | zstd(4.2)
+    compressors: "snappy"
+    # ZLIB级别(int)
+    zlibLevel:
+    # ZSTD级别(int)
+    zstdLevel:
+    # 读重试3.6+(bool)
+    retryReads:
+    # 写重试3.6+(bool)
+    retryWrites:

@@ -26,12 +26,6 @@ const (
 
 )
 
-type Client interface {
-	Close() error
-	Count(c string) (int64, error)
-	CountWith(c string, filter interface{}) (int64, error)
-}
-
 // 读优先
 type ReadPreference struct {
 	RMode         string            // 读模式, primary | primaryPreferred | secondary | secondaryPreferred | nearest
@@ -103,7 +97,7 @@ func mergeConfig(opt *Config) *Config {
 
 func Setup(key string, cnf *Config) (err error) {
 
-	client, err := newMongodbClient(mergeConfig(cnf))
+	client, err := NewClient(mergeConfig(cnf))
 	if err != nil {
 		return
 	}

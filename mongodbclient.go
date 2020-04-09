@@ -11,12 +11,13 @@ import (
 	"net"
 )
 
-type mongodbClient struct {
+// 组合已有客户端,直接支持相关方法, 另再提供若干方便方法
+type Client struct {
 	*mongo.Client
 	DB string
 }
 
-func newMongodbClient(opt *Config) (ret *mongodbClient, err error) {
+func NewClient(opt *Config) (ret *Client, err error) {
 
 	opts := options.Client()
 	opts.SetHosts(opt.Address)
@@ -159,21 +160,20 @@ func newMongodbClient(opt *Config) (ret *mongodbClient, err error) {
 	if err != nil {
 		return
 	}
-	ret = &mongodbClient{
+	ret = &Client{
 		Client: client,
 		DB:     opt.Database,
 	}
 	return
 }
 
-func (client *mongodbClient) Count(c string) (int64, error) {
-	return client.Client.Database(client.DB).Collection(c).EstimatedDocumentCount(context.Background())
+func (c *Client) Close() error {
+	if c.Client != nil {
+		return c.Client.Disconnect(nil)
+	}
+	return nil
 }
 
-func (client *mongodbClient) CountWith(c string, filter interface{}) (n int64, err error) {
-	return client.Client.Database(client.DB).Collection(c).CountDocuments(context.Background(), filter)
-}
-
-func (client *mongodbClient) Close() error {
-	return client.Client.Disconnect(context.Background())
+func (c *Client) Collection(cname string, opts ...*options.CollectionOptions) *mongo.Collection {
+	return c.Database(c.DB).Collection(cname, opts...)
 }
