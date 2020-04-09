@@ -1,236 +1,198 @@
-# package mongo
-mongo客户端
+# package mongodb
+集成官方驱动mongo-go-driver
 
 # Installation
 - go get
 ```
-go get -u github.com/globalsign/mgo
-go get -u github.com/obase/mongo
+go get -u go.mongodb.org/mongo-driver
+go get -u github.com/obase/mongodb
 ```
 - go mod
 ```
-go mod edit -require=github.com/obase/mongo@latest
+go mod edit -require=github.com/obase/mongodb@latest
 ```
 
 # Configuration
 ```
-mongo:
+mongodb:
   -
-    # 引用的key(必需)
+    # 主键(string).多值用逗号分隔
     key: test
-    # 地址(必需). 多值用逗号分隔
-    address: "127.0.0.1:27017"
-    # DB名字(必需)
+    # 地址(string).多值用逗号分隔
+    address: 10.11.165.44:27017
+    # 数据库(string).默认数据库
     database: jx3robot
-    # 用户名(可选)
-    username:
-    # 密码(可选)
-    password:
-    # 授权, 默认与database相同
-    source:
-    # 模式(可选).primary | primaryPreferred | secondary | secondaryPreferred | nearest | eventual | monotonic | strong, 默认为strong
-    model: "Strong"
-    # 安全(可选).默认值{"W":0, "WMode":"majority", "RMode":"", "WTimeout":0, "FSync":false, "J":false}
-    safe: {"W":0, "WMode":"majority", "RMode":"majority", "WTimeout":0, "FSync":false, "J":false}
-    # 连接超时(可选). 默认10秒
-    connectTimeout: "10s"
-    # Keepalive设置(可选). 默认无
-    keepalive:
-    # 读超时(可选). 默认无
-    readTimeout:
-    # 写超时(可选). 默认无
-    writeTimeout:
-    # 连接池最小数量(可选)
+    # 用户名(string).
+    username: admin
+    # 密码(string).
+    password: mongo@kingsoft.com
+    # 授权源(string), 默认admin
+    source: admin
+    # 读优先(string或{RMode string; RTagSet map[string]string; RMaxStateness time.Duration}): primary | primarypreferred | secondary | secondarypreferred | nearest, 默认由server端决定
+    readPreference: primary
+    # 读安全(string或{Level string}): majority | local, 默认由server端决定
+    readConcern: majority
+    # 写安全(string或{WMajority bool; W int; J bool; WTagSet string; WTimeout time.Duration}): majority | w3 | w2 | w1 | w0, 默认由server端决定
+    writeConcern: majority
+    # 是否直连(bool), true | false, 默认false
+    direct: false
+    # 指定副本
+    replicaSet:
+    # keepalive(time.Duration), 默认300秒
+    keepalive: 300s
+    # 连接超时(time.Duration), 默认10秒
+    connectTimeout: 10s
+    # 服务端选择超时(time.Duration), 默认30秒
+    serverSelectionTimeout: 30s
+    # 读写超时(time.Duration), 默认0表示永远不超时
+    socketTimeout: 0
+    # 心跳间隔(time.Duration), 默认10秒
+    heartbeatInterval: 10s
+    # 延迟窗口(time.Duration), 默认15毫秒
+    localThreshold: 15ms
+    # 最小连接数(uint64), 默认0
     minPoolSize: 0
-    # 连接池最大数量(可选)
+    # 最大连接数(uint64), 默认0表示无限
     maxPoolSize: 0
-    # 连接池最大等待毫秒(可选). 默认0阻塞
-    maxPoolWaitTimeMS: 0
-    # 连接池最大空闲毫秒(可选)
-    maxPoolIdleTimeMS: 0
-    default: true
+    # 最大连接闲置(time.Duration), 默认0表示无限
+    maxConnIdleTime: 0
+    # 压缩通信(string或[]string), snappy(3.4) | zlib(3.6) | zstd(4.2)
+    compressors: "snappy"
+    # ZLIB级别(int)
+    zlibLevel:
+    # ZSTD级别(int)
+    zstdLevel:
+    # 读重试3.6+(bool)
+    retryReads:
+    # 写重试3.6+(bool)
+    retryWrites:
+
 ```
 
 # Index
-- type Bulk
+- const
 ```
-type Bulk interface {
-	Insert(docs ...interface{})
-	Upsert(pairs ...interface{})
-	RemoveOne(selectors ...interface{})
-	RemoveAll(selectors ...interface{})
-	UpdateOne(pairs ...interface{})
-	UpdateAll(pairs ...interface{})
+const (
+	ReadPreference_primary            = "primary"
+	ReadPreference_primaryPreferred   = "primaryPreferred"
+	ReadPreference_secondary          = "secondary"
+	ReadPreference_secondaryPreferred = "secondaryPreferred"
+	ReadPreference_nearest            = "nearest"
+
+	ReadConcern_available   = "available"
+	ReadConcern_local       = "local"
+	ReadConcern_majority    = "majority"
+	ReadConcern_linerizable = "linerizable"
+
+	WriteConcern_majority = "majority" // 写到大多数primary结点
+	WriteConcern_w0       = "w0"       // 写后不理
+	WriteConcern_w1       = "w1"       // 写1台后返回
+	WriteConcern_w2       = "w2"       // 写2台后返回
+	WriteConcern_w3       = "w3"       // 写3台后返回
+
+)
+```
+配置常量
+
+- type Config
+```
+type Config struct {
+	// 连接URL, 格式为[mongodb://][user:pass@]host1[:port1][,host2[:port2],...][/database][?options]
+	// 常用选项
+	Address        []string        `json:"address" bson:"address" yaml:"address"`
+	Database       string          `json:"database" bson:"database" yaml:"database"`                   // 默认DB
+	Username       string          `json:"username" bson:"username" yaml:"username"`                   // 用户名
+	Password       string          `json:"password" bson:"password" yaml:"password"`                   // 密码
+	Source         string          `json:"source" bson:"source" yaml:"source"`                         // 授权DB, 默认为admin
+	ReadPreference *ReadPreference `json:"readPreference" bson:"readPreference" yaml:"readPreference"` // 读优先级, primary|primaryPreferred|secondary|secondaryPreferred|nearest
+	ReadConcern    *ReadConcern    `json:"readConcern" bson:"readConcern" yaml:"readConcern"`          // 读影响， available|local|majority|linerizable
+	WriteConcern   *WriteConcern   `json:"writeConcern" bson:"writeConcern" yaml:"writeConcern"`       // 写影响
+
+	// 连接管理
+	Direct                 bool          `json:"direct" bson:"direct" yaml:"direct"`                                                 //是否直接
+	ReplicaSet             string        `json:"replicaSet" bson:"replicaSet" yaml:"replicaSet"`                                     //数据集
+	Keepalive              time.Duration `json:"keepalive" bson:"keepalive" yaml:"keepalive"`                                        //默认300秒
+	ConnectTimeout         time.Duration `json:"connectTimeout" bson:"connectTimeout" yaml:"connectTimeout"`                         //连接超时. 默认为10秒
+	ServerSelectionTimeout time.Duration `json:"serverSelectionTimeout" bson:"serverSelectionTimeout" yaml:"serverSelectionTimeout"` // 服务端选择超时, 默认为30秒
+	SocketTimeout          time.Duration `json:"socketTimeout" bson:"socketTimeout" yaml:"socketTimeout"`                            //写超时, 默认为0, 表示阻塞
+	HeartbeatInterval      time.Duration `json:"heartbeatInterval" bson:"heartbeatInterval" yaml:"heartbeatInterval"`                // 心跳间隔, 默认为10秒
+	LocalThreshold         time.Duration `json:"localThreshold" bson:"localThreshold" yaml:"localThreshold"`                         // 延迟窗口, 默认为15毫秒
+
+	// 连接池管理
+	MinPoolSize     uint64        `json:"minPoolSize" bson:"minPoolSize" yaml:"minPoolSize"`             // 连接池最小连接数
+	MaxPoolSize     uint64        `json:"maxPoolSize" bson:"maxPoolSize" yaml:"maxPoolSize"`             // 连接池最大连接数
+	MaxConnIdleTime time.Duration `json:"maxConnIdleTime" bson:"maxConnIdleTime" yaml:"maxConnIdleTime"` // 连接池最大空闲时间
+
+	// 压缩通信
+	Compressors []string `json:"compressors" bson:"compressors" yaml:"compressors"` // 压缩算法, snappy(3.4), zlib(3.6), zstd(4.2)
+	ZlibLevel   int      `json:"zlibLevel" bson:"zlibLevel" yaml:"zlibLevel"`       // zlib压缩等级
+	ZstdLevel   int      `json:"zstdLevel" bson:"zstdLevel" yaml:"zstdLevel"`       // zstd压缩等级
+
+	// 重试机制
+	RetryReads  bool `json:"retryReads" bson:"retryReads" yaml:"retryReads"`    // 重试读(3.6)
+	RetryWrites bool `json:"retryWrites" bson:"retryWrites" yaml:"retryWrites"` // 重试写(3.6)
 }
 ```
-批量操作行为
+客户端配置
 
-- type BulkFunc
+- type ReadPreference
 ```
-type BulkFunc func(bk Bulk, args ...interface{}
-```
-批量操作函数
-
-- type SessionFunc
-```
-type SessionFunc func(se *mgo.Session, args ...interface{}) (interface{}, error)
-```
-会话回调函数
-
-- type CollectionFunc
-```
-type CollectionFunc func(cl *mgo.Collection, args ...interface{}) (interface{}, error)
-```
-集合回调函数
-
-
-- type Mongo interface
-```
-type Mongo interface {
-	Count(c string) (n int, err error)
-	Indexes(c string) (indexes []mgo.Index, err error)
-	EnsureIndex(c string, index mgo.Index) error
-	EnsureIndexKey(c string, key ...string) error
-	DropIndex(c string, key ...string) error
-	DropIndexName(c string, name string) error
-
-	// For whole document
-	FindOne(c string, ret interface{}, query interface{}) (bool, error)
-	FindAll(c string, ret interface{}, query interface{}, sort ...string) error
-	FindRange(c string, ret interface{}, query interface{}, skip uint32, limit uint32, sort ...string) error
-	FindPage(c string, tot *uint32, ret interface{}, query interface{}, skip uint32, limit uint32, sort ...string) error
-	FindDistinct(c string, ret interface{}, query interface{}, key string, sort ...string) error
-	FindId(c string, ret interface{}, id interface{}) (bool, error)
-	// Find And Select
-	SelectOne(c string, ret interface{}, query interface{}, projection interface{}) (bool, error)
-	SelectAll(c string, ret interface{}, query interface{}, projection interface{}, sort ...string) error
-	SelectRange(c string, ret interface{}, query interface{}, projection interface{}, skip uint32, limit uint32, sort ...string) error
-	SelectPage(c string, tot *uint32, ret interface{}, query interface{}, projection interface{}, skip uint32, limit uint32, sort ...string) error
-	SelectDistinct(c string, ret interface{}, query interface{}, projection interface{}, key string, sort ...string) error
-	SelectId(c string, ret interface{}, id interface{}, projection interface{}) (bool, error)
-	// FindAndModify
-	FindAndUpdate(c string, ret interface{}, query interface{}, update interface{}) (updated int, err error)              // return old doucument
-	FindAndUpsert(c string, ret interface{}, query interface{}, upsert interface{}) (upsertedId interface{}, err error)   // return old doucument
-	FindAndRemove(c string, ret interface{}, query interface{}) (removed int, err error)                                  // return old doucument
-	FindAndUpdateRN(c string, ret interface{}, query interface{}, update interface{}) (updated int, err error)            // return new doucument
-	FindAndUpsertRN(c string, ret interface{}, query interface{}, upsert interface{}) (upsertedId interface{}, err error) // return new doucument
-
-	Insert(c string, docs ...interface{}) error
-	RemoveOne(c string, selector interface{}) (bool, error)
-	RemoveAll(c string, selector interface{}) (removed int, err error)
-	RemoveId(c string, id interface{}) (bool, error)
-	UpdateOne(c string, selector interface{}, update interface{}) (bool, error)
-	UpdateAll(c string, selector interface{}, update interface{}) (updated int, err error)
-	UpdateId(c string, id interface{}, update interface{}) (bool, error)
-	UpsertOne(c string, selector interface{}, update interface{}) (upsertedId interface{}, err error)
-	UpsertId(c string, id interface{}, update interface{}) (upsertedId interface{}, err error)
-	RunBulk(c string, f BulkFunc, args ...interface{}) (matched int, modified int, err error)
-	RunCollection(c string, f CollectionFunc, args ...interface{}) (interface{}, error)
-
-	DBCount(d string, c string) (n int, err error)
-	DBIndexes(d string, c string) (indexes []mgo.Index, err error)
-	DBEnsureIndex(d string, c string, index mgo.Index) error
-	DBEnsureIndexKey(d string, c string, key ...string) error
-	DBDropIndex(d string, c string, key ...string) error
-	DBDropIndexName(d string, c string, name string) error
-
-	// For whole document
-	DBFindOne(d string, c string, ret interface{}, query interface{}) (bool, error)
-	DBFindAll(d string, c string, ret interface{}, query interface{}, sort ...string) error
-	DBFindRange(d string, c string, ret interface{}, query interface{}, skip uint32, limit uint32, sort ...string) error
-	DBFindPage(d string, c string, tot *uint32, ret interface{}, query interface{}, skip uint32, limit uint32, sort ...string) error
-	DBFindDistinct(d string, c string, ret interface{}, query interface{}, key string, sort ...string) error
-	DBFindId(d string, c string, ret interface{}, id interface{}) (bool, error)
-	// Find And Select
-	DBSelectOne(d string, c string, ret interface{}, query interface{}, projection interface{}) (bool, error)
-	DBSelectAll(d string, c string, ret interface{}, query interface{}, projection interface{}, sort ...string) error
-	DBSelectRange(d string, c string, ret interface{}, query interface{}, projection interface{}, skip uint32, limit uint32, sort ...string) error
-	DBSelectPage(d string, c string, tot *uint32, ret interface{}, query interface{}, projection interface{}, skip uint32, limit uint32, sort ...string) error
-	DBSelectDistinct(d string, c string, ret interface{}, query interface{}, projection interface{}, key string, sort ...string) error
-	DBSelectId(d string, c string, ret interface{}, id interface{}, projection interface{}) (bool, error)
-	// FindAndModify
-	DBFindAndUpdate(d string, c string, ret interface{}, query interface{}, update interface{}) (updated int, err error)              // return old doucument
-	DBFindAndUpsert(d string, c string, ret interface{}, query interface{}, upsert interface{}) (upsertedId interface{}, err error)   // return old doucument
-	DBFindAndRemove(d string, c string, ret interface{}, query interface{}) (removed int, err error)                                  // return old doucument
-	DBFindAndUpdateRN(d string, c string, ret interface{}, query interface{}, update interface{}) (updated int, err error)            // return new doucument
-	DBFindAndUpsertRN(d string, c string, ret interface{}, query interface{}, upsert interface{}) (upsertedId interface{}, err error) // return new doucument
-
-	DBInsert(d string, c string, docs ...interface{}) error
-	DBRemoveOne(d string, c string, selector interface{}) (bool, error)
-	DBRemoveAll(d string, c string, selector interface{}) (removed int, err error)
-	DBRemoveId(d string, c string, id interface{}) (bool, error)
-	DBUpdateOne(d string, c string, selector interface{}, update interface{}) (bool, error)
-	DBUpdateAll(d string, c string, selector interface{}, update interface{}) (updated int, err error)
-	DBUpdateId(d string, c string, id interface{}, update interface{}) (bool, error)
-	DBUpsertOne(d string, c string, selector interface{}, update interface{}) (upsertedId interface{}, err error)
-	DBUpsertId(d string, c string, id interface{}, update interface{}) (upsertedId interface{}, err error)
-	DBRunBulk(d string, c string, f BulkFunc, args ...interface{}) (matched int, modified int, err error)
-	DBRunCollection(d string, c string, f CollectionFunc, args ...interface{}) (interface{}, error)
-
-	RunSession(f SessionFunc, args ...interface{}) (interface{}, error)
+type ReadPreference struct {
+	RMode         string            // 读模式, primary | primaryPreferred | secondary | secondaryPreferred | nearest
+	RTagSet       map[string]string // 读标签, 支持 k1:v1,k2:v2,...的格式
+	RMaxStateness time.Duration     // specify a maxinum replication lag for reads from secondaries in a replica set
 }
 ```
-Mongo行为抽象接口
+读优先配置
+
+- type ReadConcern
+```
+type ReadConcern struct {
+	Level string `json:"level" bson:"level" yaml:"level"`
+}
+```
+读安全配置
+
+- type WriteConcern
+```
+type WriteConcern struct {
+	J         bool          `json:"J" bson:"J" yaml:"J"`                         // write operations are written to the journal
+	W         int           `json:"W" bson:"W" yaml:"W"`                         // write operations propagate to the specified number of mongod instances
+	WMajority bool          `json:"WMajority" bson:"WMajority" yaml:"WMajority"` // write operations propagate to the majority of mongod instances
+	WTagSet   string        `json:"WTagSet" bson:"WTagSet" yaml:"WTagSet"`       // write operations propagate to the specified mongod instance
+	WTimeout  time.Duration `json:"WTimeout" bson:"WTimeout" yaml:"WTimeout"`    // specifies a time limit for the write concern
+}
+```
+写安全配置
+
+- type Client
+```
+type Client struct {
+	*mongo.Client
+	DB string
+}
+```
+
+- func NewClient
+```$xslt
+func NewClient(opt *Config) (ret *Client, err error) {
+```
+根据配置创建新客户端
+
+- func Setup
+```
+func Setup(key string, cnf *Config) (err error) 
+```
+初始安装客户端,然后使用Get()或Must()获取
 
 - func Get
 ```
-func Get(name string) Mongo
+func Get(key string) *Client 
 ```
+返回指定的客户端, 结果可能为空
 
-获取配置中特定名称的实例
-# Examples
+- func Must
 ```
-func FindOperationPage(ctx context.Context, pg *Query) (data *OperationPage, err error) {
-
-	data = new(OperationPage)
-
-	query := make(map[string]interface{})
-	// 操作类型
-	if pg.Type != "" && pg.Type != "全部" {
-		query["type"] = pg.Type
-	}
-	// 是否批量操作
-	if pg.Batch != Batch_Nil {
-		if pg.Batch == Batch_Yes {
-			query["batch"] = true
-		} else {
-			query["batch"] = false
-		}
-	}
-	// 开始时间~结束时间
-	if pg.BeginTime != 0 || pg.EndTime != 0 {
-		ctime := make(map[string]interface{})
-		if pg.BeginTime != 0 {
-			ctime["$gte"] = pg.BeginTime
-		}
-		if pg.EndTime != 0 {
-			ctime["$lte"] = pg.EndTime
-		}
-		query["ctime"] = bson.M(ctime)
-	}
-
-	var or []bson.M
-	// 操作人
-	if pg.Operator != "" {
-		or = append(or, bson.M{"username": bson.M{"$regex": pg.Operator}}, bson.M{"operator": bson.M{"$regex": pg.Operator}})
-	}
-	// 关键词
-	if ln := len(pg.Keywords); ln > 0 {
-		for _, kw := range pg.Keywords {
-			if len(kw) > 0 {
-				or = append(or, bson.M{
-					"target": bson.M{"$regex": kw},
-				})
-			}
-		}
-	}
-
-	if len(or) > 0 {
-		query["$or"] = or
-	}
-
-	err = mdb.FindPage(AuditCollection, &data.Total, &data.Rows, query, uint32(pg.PageIndex*pg.PageSize), uint32(pg.PageSize), "-ctime")
-	return
-}
-
+func Must(key string) *Client 
 ```
+返回指定的客户端, 结果不能为空, 否则panic!

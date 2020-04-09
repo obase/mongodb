@@ -33,12 +33,12 @@ type ReadPreference struct {
 	RMaxStateness time.Duration     // specify a maxinum replication lag for reads from secondaries in a replica set
 }
 
-// 读影响
+// 读安全
 type ReadConcern struct {
 	Level string `json:"level" bson:"level" yaml:"level"`
 }
 
-// 写影响, 如果WMajority为true则忽略W, J表示journal
+// 写安全, 如果WMajority为true则忽略W, J表示journal
 type WriteConcern struct {
 	J         bool          `json:"J" bson:"J" yaml:"J"`                         // write operations are written to the journal
 	W         int           `json:"W" bson:"W" yaml:"W"`                         // write operations propagate to the specified number of mongod instances
