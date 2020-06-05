@@ -1,8 +1,8 @@
 package mongodb
 
 import (
-	"errors"
-	"strings"
+	"fmt"
+	"github.com/obase/conf"
 	"time"
 )
 
@@ -97,15 +97,18 @@ func mergeConfig(opt *Config) *Config {
 
 func Setup(key string, cnf *Config) (err error) {
 
-	client, err := NewClient(mergeConfig(cnf))
+	keys := conf.ToStringSlice(key)
+	for _, k := range keys {
+		if _, ok := clients[k]; ok {
+			return fmt.Errorf("duplicate mongodb client: %v", k)
+		}
+	}
+
+	client, err := newClient(mergeConfig(cnf))
 	if err != nil {
 		return
 	}
-	for _, k := range strings.Split(key, ",") {
-		k = strings.TrimSpace(k)
-		if _, ok := clients[k]; ok {
-			return errors.New("duplicate mongodb client: " + k)
-		}
+	for _, k := range keys {
 		clients[k] = client
 	}
 	return
@@ -118,7 +121,7 @@ func Get(key string) *Client {
 func Must(key string) *Client {
 	ret, ok := clients[key]
 	if !ok {
-		panic("missing mongodb client: " + key)
+		panic("invalid mongodb client: " + key)
 	}
 	return ret
 }

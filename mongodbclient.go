@@ -2,6 +2,7 @@ package mongodb
 
 import (
 	"context"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readconcern"
@@ -17,7 +18,7 @@ type Client struct {
 	DB string
 }
 
-func NewClient(opt *Config) (ret *Client, err error) {
+func newClient(opt *Config) (ret *Client, err error) {
 
 	opts := options.Client()
 	opts.SetHosts(opt.Address)
@@ -167,13 +168,149 @@ func NewClient(opt *Config) (ret *Client, err error) {
 	return
 }
 
-func (c *Client) Close() error {
-	if c.Client != nil {
-		return c.Client.Disconnect(nil)
+func (cc *Client) Close() error {
+	if cc.Client != nil {
+		return cc.Client.Disconnect(nil)
 	}
 	return nil
 }
 
-func (c *Client) Collection(cname string, opts ...*options.CollectionOptions) *mongo.Collection {
-	return c.Database(c.DB).Collection(cname, opts...)
+func (cc *Client) Collection(cl string, opts ...*options.CollectionOptions) *mongo.Collection {
+	return cc.Database(cc.DB).Collection(cl, opts...)
+}
+
+func (cc *Client) DBCollection(db string, cl string, opts ...*options.CollectionOptions) *mongo.Collection {
+	return cc.Database(db).Collection(cl, opts...)
+}
+
+func (cc *Client) Count(cl string, filters ...interface{}) (ret int64, err error) {
+
+	if len(filters) == 0 {
+		return cc.Database(cc.DB).Collection(cl).EstimatedDocumentCount(nil)
+	} else {
+		return cc.Database(cc.DB).Collection(cl).CountDocuments(nil, filters[0])
+	}
+
+}
+
+func (cc *Client) DBCount(db string, cl string, filters ...interface{}) (ret int64, err error) {
+
+	if len(filters) == 0 {
+		return cc.Database(db).Collection(cl).EstimatedDocumentCount(nil)
+	} else {
+		return cc.Database(db).Collection(cl).CountDocuments(nil, filters[0])
+	}
+
+}
+
+func (cc *Client) FindId(ret interface{}, cl string, id interface{}) (not bool, err error) {
+	err = cc.Database(cc.DB).Collection(cl).FindOne(nil, bson.M{"_id": id}).Decode(ret)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			not = true
+			err = nil
+		}
+	}
+	return
+}
+
+func (cc *Client) DBFindId(ret interface{}, db string, cl string, id interface{}) (not bool, err error) {
+	err = cc.Database(db).Collection(cl).FindOne(nil, bson.M{"_id": id}).Decode(ret)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			not = true
+			err = nil
+		}
+	}
+	return
+}
+
+func (cc *Client) FindOne(ret interface{}, cl string, filter interface{}) (not bool, err error) {
+	err = cc.Database(cc.DB).Collection(cl).FindOne(nil, filter).Decode(ret)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			not = true
+			err = nil
+		}
+	}
+	return
+}
+
+func (cc *Client) DBFindOne(ret interface{}, db string, cl string, filter interface{}) (not bool, err error) {
+	err = cc.Database(db).Collection(cl).FindOne(nil, filter).Decode(ret)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			not = true
+			err = nil
+		}
+	}
+	return
+}
+
+func (cc *Client) FindAll(ret interface{}, cl string, filter interface{}, sorts ...bson.E) (err error) {
+	var cur *mongo.Cursor
+	if len(sorts) > 0 {
+		cur, err = cc.Database(cc.DB).Collection(cl).Find(nil, filter, options.Find().SetSort(bson.D(sorts)))
+	} else {
+		cur, err = cc.Database(cc.DB).Collection(cl).Find(nil, filter)
+	}
+	if err == nil {
+		err = cur.All(nil, ret)
+	}
+	return
+}
+
+func (cc *Client) DBFindAll(ret interface{}, db string, cl string, filter interface{}, sorts ...bson.E) (err error) {
+	var cur *mongo.Cursor
+	if len(sorts) > 0 {
+		cur, err = cc.Database(db).Collection(cl).Find(nil, filter, options.Find().SetSort(bson.D(sorts)))
+	} else {
+		cur, err = cc.Database(db).Collection(cl).Find(nil, filter)
+	}
+	if err == nil {
+		err = cur.All(nil, ret)
+	}
+	return
+}
+
+func (cc *Client) FindWith(fn func(*mongo.Cursor) error, cl string, filter interface{}, sorts ...bson.E) (err error) {
+	var cur *mongo.Cursor
+	if len(sorts) > 0 {
+		cur, err = cc.Database(cc.DB).Collection(cl).Find(nil, filter, options.Find().SetSort(bson.D(sorts)))
+	} else {
+		cur, err = cc.Database(cc.DB).Collection(cl).Find(nil, filter)
+	}
+	if err == nil {
+		defer cur.Close(nil)
+		err = fn(cur)
+	}
+	return
+}
+
+func (cc *Client) DBFindWith(fn func(*mongo.Cursor) error, db string, cl string, filter interface{}, sorts ...bson.E) (err error) {
+	var cur *mongo.Cursor
+	if len(sorts) > 0 {
+		cur, err = cc.Database(db).Collection(cl).Find(nil, filter, options.Find().SetSort(bson.D(sorts)))
+	} else {
+		cur, err = cc.Database(db).Collection(cl).Find(nil, filter)
+	}
+	if err == nil {
+		defer cur.Close(nil)
+		err = fn(cur)
+	}
+	return
+}
+
+func (cc *Client) FindRange(ret interface{}, cl string, filter interface{}, skip int64, limit int64, sorts ...bson.E) (err error) {
+
+	var cur *mongo.Cursor
+	if len(sorts) > 0 {
+		cc.Database(cc.DB).Collection(cl).Find(nil, filter, options.Find().SetSkip(skip).SetLimit(limit).SetSort(bson.D(sorts)))
+	} else {
+		cc.Database(cc.DB).Collection(cl).Find(nil, filter, options.Find().SetSkip(skip).SetLimit(limit))
+	}
+	if err == nil {
+		err = cur.All(nil, ret)
+	}
+	return
 }
