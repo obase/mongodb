@@ -2,6 +2,7 @@ package mongodb
 
 import (
 	"context"
+	"github.com/obase/mongodb/option"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -12,10 +13,13 @@ import (
 	"net"
 )
 
+var emptyFilter = bson.M{}
+
 // 组合已有客户端,直接支持相关方法, 另再提供若干方便方法
 type Client struct {
 	*mongo.Client
-	DB string
+	DB             string
+	collectOptions *options.CollectionOptions
 }
 
 func newClient(opt *Config) (ret *Client, err error) {
@@ -168,6 +172,14 @@ func newClient(opt *Config) (ret *Client, err error) {
 	return
 }
 
+func (cc *Client) DatabaseOptions(opts ...*options.DatabaseOptions) {
+	cc.dbopts = append(cc.dbopts, opts...)
+}
+
+func (cc *Client) CollectionOptions(opts ...*options.CollectionOptions) {
+	cc.clopts = append(cc.clopts, opts...)
+}
+
 func (cc *Client) Close() error {
 	if cc.Client != nil {
 		return cc.Client.Disconnect(nil)
@@ -175,36 +187,39 @@ func (cc *Client) Close() error {
 	return nil
 }
 
+func (cc *Client) ListDatabaseNames(filter interface{}) ([]string, error) {
+	if filter == nil {
+		filter = emptyFilter
+	}
+	return cc.Client.ListDatabaseNames(nil, filter)
+}
+
+func (cc *Client) ListCollectionNames(filter interface{}) ([]string, error) {
+	if filter == nil {
+		filter = emptyFilter
+	}
+	return cc.Client.Database(cc.DB, cc.dbopts...).ListCollectionNames(nil, filter)
+}
+
 func (cc *Client) Collection(cl string, opts ...*options.CollectionOptions) *mongo.Collection {
-	return cc.Database(cc.DB).Collection(cl, opts...)
+	if len(cc.clopts) > 0 {
+		opts = append(opts, cc.clopts...)
+	}
+	return cc.Database(cc.DB, cc.dbopts...).Collection(cl, opts...)
 }
 
-func (cc *Client) DBCollection(db string, cl string, opts ...*options.CollectionOptions) *mongo.Collection {
-	return cc.Database(db).Collection(cl, opts...)
-}
-
-func (cc *Client) Count(cl string, filter interface{}) (ret int64, err error) {
+func (cc *Client) Count(cl string, filter interface{}, opts ...*option.Options) (ret int64, err error) {
 
 	if filter == nil {
-		return cc.Database(cc.DB).Collection(cl).EstimatedDocumentCount(nil)
+		return cc.Database(cc.DB, cc.dbopts...).Collection(cl, cc.clopts...).EstimatedDocumentCount(nil)
 	} else {
-		return cc.Database(cc.DB).Collection(cl).CountDocuments(nil, filter)
+		return cc.Database(cc.DB, cc.dbopts...).Collection(cl, cc.clopts...).CountDocuments(nil, filter)
 	}
 
 }
 
-func (cc *Client) DBCount(db string, cl string, filter interface{}) (ret int64, err error) {
-
-	if filter == nil {
-		return cc.Database(db).Collection(cl).EstimatedDocumentCount(nil)
-	} else {
-		return cc.Database(db).Collection(cl).CountDocuments(nil, filter)
-	}
-
-}
-
-func (cc *Client) FindId(cl string, id interface{}, ret interface{}) (not bool, err error) {
-	err = cc.Database(cc.DB).Collection(cl).FindOne(nil, bson.M{"_id": id}).Decode(ret)
+func (cc *Client) FindId(cl string, id interface{}, ret interface{}, opts ...*option.Options) (not bool, err error) {
+	err = cc.Database(cc.DB, cc.dbopts...).Collection(cl, cc.clopts...).FindOne(nil, bson.M{"_id": id}).Decode(ret)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			not = true
@@ -213,25 +228,12 @@ func (cc *Client) FindId(cl string, id interface{}, ret interface{}) (not bool, 
 	}
 	return
 }
-
-func (cc *Client) DBFindId(db string, cl string, id interface{}, ret interface{}) (not bool, err error) {
-	err = cc.Database(db).Collection(cl).FindOne(nil, bson.M{"_id": id}).Decode(ret)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			not = true
-			err = nil
-		}
-	}
-	return
-}
-
-var emptyFilter = bson.M{}
 
 func (cc *Client) FindOne(cl string, filter interface{}, ret interface{}) (not bool, err error) {
 	if filter == nil {
 		filter = emptyFilter
 	}
-	err = cc.Database(cc.DB).Collection(cl).FindOne(nil, filter).Decode(ret)
+	err = cc.Database(cc.DB, cc.dbopts...).Collection(cl, cc.clopts...).FindOne(nil, filter).Decode(ret)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			not = true
@@ -245,7 +247,7 @@ func (cc *Client) FindAll(cl string, filter interface{}, ret interface{}, opts .
 	if filter == nil {
 		filter = emptyFilter
 	}
-	cur, err := cc.Database(cc.DB).Collection(cl).Find(nil, filter, opts...)
+	cur, err := cc.Database(cc.DB, cc.dbopts...).Collection(cl, cc.clopts...).Find(nil, filter, opts...)
 	if err == nil {
 		err = cur.All(nil, ret)
 	}
@@ -256,7 +258,7 @@ func (cc *Client) FindWith(cl string, filter interface{}, fn func(cur *mongo.Cur
 	if filter == nil {
 		filter = emptyFilter
 	}
-	cur, err := cc.Database(cc.DB).Collection(cl).Find(nil, filter, opts...)
+	cur, err := cc.Database(cc.DB, cc.dbopts...).Collection(cl, cc.clopts...).Find(nil, filter, opts...)
 	if err == nil {
 		defer cur.Close(nil)
 		err = fn(cur)
@@ -268,7 +270,10 @@ func (cc *Client) Distinct(cl string, fieldName string, filter interface{}, opts
 	if filter == nil {
 		filter = emptyFilter
 	}
-	ret, err = cc.Database(cc.DB).Collection(cl).Distinct(nil, fieldName, filter, opts...)
+	ret, err = cc.Database(cc.DB, cc.dbopts...).Collection(cl, cc.clopts...).Distinct(nil, fieldName, filter, opts...)
 	return
 }
 
+func (cc *Client) FindIdAndUpdate(cl string, id interface{}, update interface{}) {
+	cc.Database(cc.DB, cc.dbopts...).Collection(cl, cc.clopts...).FindOneAndUpdate(nil, bson.M{"_id": id}, update)
+}
