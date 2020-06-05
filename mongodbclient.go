@@ -99,7 +99,7 @@ func newClient(opt *Config) (ret *Client, err error) {
 		opts.SetWriteConcern(writeconcern.New(wcopts...))
 	}
 
-	opts.SetDirect(true)
+	opts.SetDirect(opt.Direct) // FIXBUG: direct to whole cluster
 
 	if opt.ReplicaSet != "" {
 		opts.SetReplicaSet(opt.ReplicaSet)
@@ -183,27 +183,27 @@ func (cc *Client) DBCollection(db string, cl string, opts ...*options.Collection
 	return cc.Database(db).Collection(cl, opts...)
 }
 
-func (cc *Client) Count(cl string, filters ...interface{}) (ret int64, err error) {
+func (cc *Client) Count(cl string, filter interface{}) (ret int64, err error) {
 
-	if len(filters) == 0 {
+	if filter == nil {
 		return cc.Database(cc.DB).Collection(cl).EstimatedDocumentCount(nil)
 	} else {
-		return cc.Database(cc.DB).Collection(cl).CountDocuments(nil, filters[0])
+		return cc.Database(cc.DB).Collection(cl).CountDocuments(nil, filter)
 	}
 
 }
 
-func (cc *Client) DBCount(db string, cl string, filters ...interface{}) (ret int64, err error) {
+func (cc *Client) DBCount(db string, cl string, filter interface{}) (ret int64, err error) {
 
-	if len(filters) == 0 {
+	if filter == nil {
 		return cc.Database(db).Collection(cl).EstimatedDocumentCount(nil)
 	} else {
-		return cc.Database(db).Collection(cl).CountDocuments(nil, filters[0])
+		return cc.Database(db).Collection(cl).CountDocuments(nil, filter)
 	}
 
 }
 
-func (cc *Client) FindId(ret interface{}, cl string, id interface{}) (not bool, err error) {
+func (cc *Client) FindId(cl string, id interface{}, ret interface{}) (not bool, err error) {
 	err = cc.Database(cc.DB).Collection(cl).FindOne(nil, bson.M{"_id": id}).Decode(ret)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -214,7 +214,7 @@ func (cc *Client) FindId(ret interface{}, cl string, id interface{}) (not bool, 
 	return
 }
 
-func (cc *Client) DBFindId(ret interface{}, db string, cl string, id interface{}) (not bool, err error) {
+func (cc *Client) DBFindId(db string, cl string, id interface{}, ret interface{}) (not bool, err error) {
 	err = cc.Database(db).Collection(cl).FindOne(nil, bson.M{"_id": id}).Decode(ret)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -225,7 +225,12 @@ func (cc *Client) DBFindId(ret interface{}, db string, cl string, id interface{}
 	return
 }
 
-func (cc *Client) FindOne(ret interface{}, cl string, filter interface{}) (not bool, err error) {
+var emptyFilter = bson.M{}
+
+func (cc *Client) FindOne(cl string, filter interface{}, ret interface{}) (not bool, err error) {
+	if filter == nil {
+		filter = emptyFilter
+	}
 	err = cc.Database(cc.DB).Collection(cl).FindOne(nil, filter).Decode(ret)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -236,50 +241,22 @@ func (cc *Client) FindOne(ret interface{}, cl string, filter interface{}) (not b
 	return
 }
 
-func (cc *Client) DBFindOne(ret interface{}, db string, cl string, filter interface{}) (not bool, err error) {
-	err = cc.Database(db).Collection(cl).FindOne(nil, filter).Decode(ret)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			not = true
-			err = nil
-		}
+func (cc *Client) FindAll(cl string, filter interface{}, ret interface{}, opts ...*options.FindOptions) (err error) {
+	if filter == nil {
+		filter = emptyFilter
 	}
-	return
-}
-
-func (cc *Client) FindAll(ret interface{}, cl string, filter interface{}, sorts ...bson.E) (err error) {
-	var cur *mongo.Cursor
-	if len(sorts) > 0 {
-		cur, err = cc.Database(cc.DB).Collection(cl).Find(nil, filter, options.Find().SetSort(bson.D(sorts)))
-	} else {
-		cur, err = cc.Database(cc.DB).Collection(cl).Find(nil, filter)
-	}
+	cur, err := cc.Database(cc.DB).Collection(cl).Find(nil, filter, opts...)
 	if err == nil {
 		err = cur.All(nil, ret)
 	}
 	return
 }
 
-func (cc *Client) DBFindAll(ret interface{}, db string, cl string, filter interface{}, sorts ...bson.E) (err error) {
-	var cur *mongo.Cursor
-	if len(sorts) > 0 {
-		cur, err = cc.Database(db).Collection(cl).Find(nil, filter, options.Find().SetSort(bson.D(sorts)))
-	} else {
-		cur, err = cc.Database(db).Collection(cl).Find(nil, filter)
+func (cc *Client) FindWith(cl string, filter interface{}, fn func(cur *mongo.Cursor) error, opts ...*options.FindOptions) (err error) {
+	if filter == nil {
+		filter = emptyFilter
 	}
-	if err == nil {
-		err = cur.All(nil, ret)
-	}
-	return
-}
-
-func (cc *Client) FindWith(fn func(*mongo.Cursor) error, cl string, filter interface{}, sorts ...bson.E) (err error) {
-	var cur *mongo.Cursor
-	if len(sorts) > 0 {
-		cur, err = cc.Database(cc.DB).Collection(cl).Find(nil, filter, options.Find().SetSort(bson.D(sorts)))
-	} else {
-		cur, err = cc.Database(cc.DB).Collection(cl).Find(nil, filter)
-	}
+	cur, err := cc.Database(cc.DB).Collection(cl).Find(nil, filter, opts...)
 	if err == nil {
 		defer cur.Close(nil)
 		err = fn(cur)
@@ -287,30 +264,11 @@ func (cc *Client) FindWith(fn func(*mongo.Cursor) error, cl string, filter inter
 	return
 }
 
-func (cc *Client) DBFindWith(fn func(*mongo.Cursor) error, db string, cl string, filter interface{}, sorts ...bson.E) (err error) {
-	var cur *mongo.Cursor
-	if len(sorts) > 0 {
-		cur, err = cc.Database(db).Collection(cl).Find(nil, filter, options.Find().SetSort(bson.D(sorts)))
-	} else {
-		cur, err = cc.Database(db).Collection(cl).Find(nil, filter)
+func (cc *Client) Distinct(cl string, fieldName string, filter interface{}, opts ...*options.DistinctOptions) (ret []interface{}, err error) {
+	if filter == nil {
+		filter = emptyFilter
 	}
-	if err == nil {
-		defer cur.Close(nil)
-		err = fn(cur)
-	}
+	ret, err = cc.Database(cc.DB).Collection(cl).Distinct(nil, fieldName, filter, opts...)
 	return
 }
 
-func (cc *Client) FindRange(ret interface{}, cl string, filter interface{}, skip int64, limit int64, sorts ...bson.E) (err error) {
-
-	var cur *mongo.Cursor
-	if len(sorts) > 0 {
-		cc.Database(cc.DB).Collection(cl).Find(nil, filter, options.Find().SetSkip(skip).SetLimit(limit).SetSort(bson.D(sorts)))
-	} else {
-		cc.Database(cc.DB).Collection(cl).Find(nil, filter, options.Find().SetSkip(skip).SetLimit(limit))
-	}
-	if err == nil {
-		err = cur.All(nil, ret)
-	}
-	return
-}
