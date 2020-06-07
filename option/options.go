@@ -1,11 +1,41 @@
 package option
 
 import (
+	"go.mongodb.org/mongo-driver/bson/bsoncodec"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readconcern"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
+	"go.mongodb.org/mongo-driver/mongo/writeconcern"
 	"time"
 )
 
 type Options struct {
+
+	/*
+	- CollectionOptions
+	*/
+	// The read concern to use for operations executed on the Collection. The default value is nil, which means that
+	// the read concern of the database used to configure the Collection will be used.
+	ReadConcern *readconcern.ReadConcern
+
+	// The write concern to use for operations executed on the Collection. The default value is nil, which means that
+	// the write concern of the database used to configure the Collection will be used.
+	WriteConcern *writeconcern.WriteConcern
+
+	// The read preference to use for operations executed on the Collection. The default value is nil, which means that
+	// the read preference of the database used to configure the Collection will be used.
+	ReadPreference *readpref.ReadPref
+
+	// The BSON registry to marshal and unmarshal documents for operations executed on the Collection. The default value
+	// is nil, which means that the registry of the database used to configure the Collection will be used.
+	Registry *bsoncodec.Registry
+
+	/*
+	- FineOptions
+	- FindOneOptions
+	- CountOptions
+	- EstimatedDocumentCountOptions
+	*/
 	// If true, an operation on a sharded cluster can return partial results if some shards are down rather than
 	// returning an error. The default value is false.
 	AllowPartialResults *bool
@@ -80,6 +110,9 @@ type Options struct {
 
 	// A document specifying the order in which documents should be returned.
 	Sort interface{}
+	/*
+	-
+	*/
 }
 
 /*--------------------------------转换其他选项------------------------------------*/

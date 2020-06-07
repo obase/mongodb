@@ -18,8 +18,8 @@ var emptyFilter = bson.M{}
 // 组合已有客户端,直接支持相关方法, 另再提供若干方便方法
 type Client struct {
 	*mongo.Client
-	DB             string
-	collectOptions *options.CollectionOptions
+	DB                string
+	collectionOptions *options.CollectionOptions
 }
 
 func newClient(opt *Config) (ret *Client, err error) {
@@ -172,12 +172,8 @@ func newClient(opt *Config) (ret *Client, err error) {
 	return
 }
 
-func (cc *Client) DatabaseOptions(opts ...*options.DatabaseOptions) {
-	cc.dbopts = append(cc.dbopts, opts...)
-}
-
-func (cc *Client) CollectionOptions(opts ...*options.CollectionOptions) {
-	cc.clopts = append(cc.clopts, opts...)
+func (cc *Client) CollectionOptions(opts *options.CollectionOptions) {
+	cc.collectionOptions = opts
 }
 
 func (cc *Client) Close() error {
@@ -198,28 +194,28 @@ func (cc *Client) ListCollectionNames(filter interface{}) ([]string, error) {
 	if filter == nil {
 		filter = emptyFilter
 	}
-	return cc.Client.Database(cc.DB, cc.dbopts...).ListCollectionNames(nil, filter)
+	return cc.Client.Database(cc.DB).ListCollectionNames(nil, filter)
 }
 
 func (cc *Client) Collection(cl string, opts ...*options.CollectionOptions) *mongo.Collection {
-	if len(cc.clopts) > 0 {
-		opts = append(opts, cc.clopts...)
+	if cc.collectionOptions != nil {
+		opts = append(opts, cc.collectionOptions)
 	}
-	return cc.Database(cc.DB, cc.dbopts...).Collection(cl, opts...)
+	return cc.Database(cc.DB).Collection(cl, opts...)
 }
 
 func (cc *Client) Count(cl string, filter interface{}, opts ...*option.Options) (ret int64, err error) {
 
 	if filter == nil {
-		return cc.Database(cc.DB, cc.dbopts...).Collection(cl, cc.clopts...).EstimatedDocumentCount(nil)
+		return cc.Database(cc.DB).Collection(cl, cc.collectionOptions).EstimatedDocumentCount(nil)
 	} else {
-		return cc.Database(cc.DB, cc.dbopts...).Collection(cl, cc.clopts...).CountDocuments(nil, filter)
+		return cc.Database(cc.DB).Collection(cl, cc.collectionOptions).CountDocuments(nil, filter)
 	}
 
 }
 
 func (cc *Client) FindId(cl string, id interface{}, ret interface{}, opts ...*option.Options) (not bool, err error) {
-	err = cc.Database(cc.DB, cc.dbopts...).Collection(cl, cc.clopts...).FindOne(nil, bson.M{"_id": id}).Decode(ret)
+	err = cc.Database(cc.DB).Collection(cl, cc.collectionOptions).FindOne(nil, bson.M{"_id": id}).Decode(ret)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			not = true
@@ -233,7 +229,7 @@ func (cc *Client) FindOne(cl string, filter interface{}, ret interface{}) (not b
 	if filter == nil {
 		filter = emptyFilter
 	}
-	err = cc.Database(cc.DB, cc.dbopts...).Collection(cl, cc.clopts...).FindOne(nil, filter).Decode(ret)
+	err = cc.Database(cc.DB).Collection(cl, cc.collectionOptions).FindOne(nil, filter).Decode(ret)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			not = true
@@ -247,7 +243,7 @@ func (cc *Client) FindAll(cl string, filter interface{}, ret interface{}, opts .
 	if filter == nil {
 		filter = emptyFilter
 	}
-	cur, err := cc.Database(cc.DB, cc.dbopts...).Collection(cl, cc.clopts...).Find(nil, filter, opts...)
+	cur, err := cc.Database(cc.DB).Collection(cl, cc.collectionOptions).Find(nil, filter, opts...)
 	if err == nil {
 		err = cur.All(nil, ret)
 	}
@@ -258,7 +254,7 @@ func (cc *Client) FindWith(cl string, filter interface{}, fn func(cur *mongo.Cur
 	if filter == nil {
 		filter = emptyFilter
 	}
-	cur, err := cc.Database(cc.DB, cc.dbopts...).Collection(cl, cc.clopts...).Find(nil, filter, opts...)
+	cur, err := cc.Database(cc.DB).Collection(cl, cc.collectionOptions).Find(nil, filter, opts...)
 	if err == nil {
 		defer cur.Close(nil)
 		err = fn(cur)
@@ -270,10 +266,10 @@ func (cc *Client) Distinct(cl string, fieldName string, filter interface{}, opts
 	if filter == nil {
 		filter = emptyFilter
 	}
-	ret, err = cc.Database(cc.DB, cc.dbopts...).Collection(cl, cc.clopts...).Distinct(nil, fieldName, filter, opts...)
+	ret, err = cc.Database(cc.DB).Collection(cl, cc.collectionOptions).Distinct(nil, fieldName, filter, opts...)
 	return
 }
 
 func (cc *Client) FindIdAndUpdate(cl string, id interface{}, update interface{}) {
-	cc.Database(cc.DB, cc.dbopts...).Collection(cl, cc.clopts...).FindOneAndUpdate(nil, bson.M{"_id": id}, update)
+	cc.Database(cc.DB).Collection(cl, cc.collectionOptions).FindOneAndUpdate(nil, bson.M{"_id": id}, update)
 }
