@@ -3,6 +3,7 @@ package mongodb
 import (
 	"context"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readconcern"
@@ -14,12 +15,21 @@ import (
 
 var ALL = bson.M{}
 
+func ObjectId(s string) *primitive.ObjectID {
+	id, err := primitive.ObjectIDFromHex(s)
+	if err == nil {
+		return &id
+	}
+	return nil
+}
+
 // 组合已有客户端,直接支持相关方法, 另再提供若干方便方法
 type Client struct {
 	*mongo.Client
 	DB                string
 	collectionOptions *options.CollectionOptions
 	ALL               bson.M
+	ObjectId          func(s string) *primitive.ObjectID
 }
 
 func newClient(opt *Config) (ret *Client, err error) {
@@ -166,9 +176,10 @@ func newClient(opt *Config) (ret *Client, err error) {
 		return
 	}
 	ret = &Client{
-		Client: client,
-		DB:     opt.Database,
-		ALL:    ALL, // 快捷引用
+		Client:   client,
+		DB:       opt.Database,
+		ALL:      ALL, // 快捷引用
+		ObjectId: ObjectId,
 	}
 	return
 }
@@ -185,11 +196,23 @@ func (cc *Client) Close() (err error) {
 	return
 }
 
-func (cc *Client) ListDatabaseNames(filter interface{}) ([]string, error) {
+func (cc *Client) ListDatabaseNames(filters ...interface{}) ([]string, error) {
+	var filter interface{}
+	if len(filters) > 0 {
+		filter = filters[0]
+	} else {
+		filter = ALL
+	}
 	return cc.Client.ListDatabaseNames(nil, filter)
 }
 
-func (cc *Client) ListCollectionNames(filter interface{}) ([]string, error) {
+func (cc *Client) ListCollectionNames(filters ...interface{}) ([]string, error) {
+	var filter interface{}
+	if len(filters) > 0 {
+		filter = filters[0]
+	} else {
+		filter = ALL
+	}
 	return cc.Client.Database(cc.DB).ListCollectionNames(nil, filter)
 }
 
@@ -256,7 +279,7 @@ func (cc *Client) Distinct(cl string, fieldName string, filter interface{}, opts
 func (cc *Client) FindIdAndUpdate(cl string, id interface{}, update interface{}, ret interface{}, opts ...*options.FindOneAndUpdateOptions) (not bool, err error) {
 	result := cc.Database(cc.DB).Collection(cl, cc.collectionOptions).FindOneAndUpdate(nil, bson.M{"_id": id}, update, opts...)
 	if ret != nil {
-		err = result.Decode(&ret)
+		err = result.Decode(ret)
 		if err == mongo.ErrNoDocuments {
 			not = true
 			err = nil
@@ -268,7 +291,7 @@ func (cc *Client) FindIdAndUpdate(cl string, id interface{}, update interface{},
 func (cc *Client) FindIdAndReplace(cl string, id interface{}, replace interface{}, ret interface{}, opts ...*options.FindOneAndReplaceOptions) (not bool, err error) {
 	result := cc.Database(cc.DB).Collection(cl, cc.collectionOptions).FindOneAndReplace(nil, bson.M{"_id": id}, replace, opts...)
 	if ret != nil {
-		err = result.Decode(&ret)
+		err = result.Decode(ret)
 		if err == mongo.ErrNoDocuments {
 			not = true
 			err = nil
@@ -280,7 +303,7 @@ func (cc *Client) FindIdAndReplace(cl string, id interface{}, replace interface{
 func (cc *Client) FindIdAndDelete(cl string, id interface{}, ret interface{}, opts ...*options.FindOneAndDeleteOptions) (not bool, err error) {
 	result := cc.Database(cc.DB).Collection(cl, cc.collectionOptions).FindOneAndDelete(nil, bson.M{"_id": id}, opts...)
 	if ret != nil {
-		err = result.Decode(&ret)
+		err = result.Decode(ret)
 		if err == mongo.ErrNoDocuments {
 			not = true
 			err = nil
@@ -292,7 +315,7 @@ func (cc *Client) FindIdAndDelete(cl string, id interface{}, ret interface{}, op
 func (cc *Client) FindOneAndUpdate(cl string, filter interface{}, update interface{}, ret interface{}, opts ...*options.FindOneAndUpdateOptions) (not bool, err error) {
 	result := cc.Database(cc.DB).Collection(cl, cc.collectionOptions).FindOneAndUpdate(nil, filter, update, opts...)
 	if ret != nil {
-		err = result.Decode(&ret)
+		err = result.Decode(ret)
 		if err == mongo.ErrNoDocuments {
 			not = true
 			err = nil
@@ -304,7 +327,7 @@ func (cc *Client) FindOneAndUpdate(cl string, filter interface{}, update interfa
 func (cc *Client) FindOneAndReplace(cl string, filter interface{}, replace interface{}, ret interface{}, opts ...*options.FindOneAndReplaceOptions) (not bool, err error) {
 	result := cc.Database(cc.DB).Collection(cl, cc.collectionOptions).FindOneAndReplace(nil, filter, replace, opts...)
 	if ret != nil {
-		err = result.Decode(&ret)
+		err = result.Decode(ret)
 		if err == mongo.ErrNoDocuments {
 			not = true
 			err = nil
@@ -316,7 +339,7 @@ func (cc *Client) FindOneAndReplace(cl string, filter interface{}, replace inter
 func (cc *Client) FindOneAndDelete(cl string, filter interface{}, ret interface{}, opts ...*options.FindOneAndDeleteOptions) (not bool, err error) {
 	result := cc.Database(cc.DB).Collection(cl, cc.collectionOptions).FindOneAndDelete(nil, filter, opts...)
 	if ret != nil {
-		err = result.Decode(&ret)
+		err = result.Decode(ret)
 		if err == mongo.ErrNoDocuments {
 			not = true
 			err = nil
