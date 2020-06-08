@@ -2,7 +2,6 @@ package mongodb
 
 import (
 	"context"
-	"github.com/obase/mongodb/option"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -13,13 +12,14 @@ import (
 	"net"
 )
 
-var emptyFilter = bson.M{}
+var ALL = bson.M{}
 
 // 组合已有客户端,直接支持相关方法, 另再提供若干方便方法
 type Client struct {
 	*mongo.Client
 	DB                string
 	collectionOptions *options.CollectionOptions
+	ALL               bson.M
 }
 
 func newClient(opt *Config) (ret *Client, err error) {
@@ -168,32 +168,28 @@ func newClient(opt *Config) (ret *Client, err error) {
 	ret = &Client{
 		Client: client,
 		DB:     opt.Database,
+		ALL:    ALL, // 快捷引用
 	}
 	return
 }
 
-func (cc *Client) CollectionOptions(opts *options.CollectionOptions) {
+func (cc *Client) CollectionOptions(opts *options.CollectionOptions) *Client {
 	cc.collectionOptions = opts
+	return cc
 }
 
-func (cc *Client) Close() error {
+func (cc *Client) Close() (err error) {
 	if cc.Client != nil {
-		return cc.Client.Disconnect(nil)
+		err = cc.Client.Disconnect(nil)
 	}
-	return nil
+	return
 }
 
 func (cc *Client) ListDatabaseNames(filter interface{}) ([]string, error) {
-	if filter == nil {
-		filter = emptyFilter
-	}
 	return cc.Client.ListDatabaseNames(nil, filter)
 }
 
 func (cc *Client) ListCollectionNames(filter interface{}) ([]string, error) {
-	if filter == nil {
-		filter = emptyFilter
-	}
 	return cc.Client.Database(cc.DB).ListCollectionNames(nil, filter)
 }
 
@@ -204,18 +200,17 @@ func (cc *Client) Collection(cl string, opts ...*options.CollectionOptions) *mon
 	return cc.Database(cc.DB).Collection(cl, opts...)
 }
 
-func (cc *Client) Count(cl string, filter interface{}, opts ...*option.Options) (ret int64, err error) {
-
-	if filter == nil {
+func (cc *Client) Count(cl string, filters ...interface{}) (ret int64, err error) {
+	if len(filters) == 0 {
 		return cc.Database(cc.DB).Collection(cl, cc.collectionOptions).EstimatedDocumentCount(nil)
 	} else {
-		return cc.Database(cc.DB).Collection(cl, cc.collectionOptions).CountDocuments(nil, filter)
+		return cc.Database(cc.DB).Collection(cl, cc.collectionOptions).CountDocuments(nil, filters[0])
 	}
 
 }
 
-func (cc *Client) FindId(cl string, id interface{}, ret interface{}, opts ...*option.Options) (not bool, err error) {
-	err = cc.Database(cc.DB).Collection(cl, cc.collectionOptions).FindOne(nil, bson.M{"_id": id}).Decode(ret)
+func (cc *Client) FindId(cl string, id interface{}, ret interface{}, opts ...*options.FindOneOptions) (not bool, err error) {
+	err = cc.Database(cc.DB).Collection(cl, cc.collectionOptions).FindOne(nil, bson.M{"_id": id}, opts...).Decode(ret)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			not = true
@@ -225,11 +220,8 @@ func (cc *Client) FindId(cl string, id interface{}, ret interface{}, opts ...*op
 	return
 }
 
-func (cc *Client) FindOne(cl string, filter interface{}, ret interface{}) (not bool, err error) {
-	if filter == nil {
-		filter = emptyFilter
-	}
-	err = cc.Database(cc.DB).Collection(cl, cc.collectionOptions).FindOne(nil, filter).Decode(ret)
+func (cc *Client) FindOne(cl string, filter interface{}, ret interface{}, opts ...*options.FindOneOptions) (not bool, err error) {
+	err = cc.Database(cc.DB).Collection(cl, cc.collectionOptions).FindOne(nil, filter, opts...).Decode(ret)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			not = true
@@ -239,10 +231,7 @@ func (cc *Client) FindOne(cl string, filter interface{}, ret interface{}) (not b
 	return
 }
 
-func (cc *Client) FindAll(cl string, filter interface{}, ret interface{}, opts ...*options.FindOptions) (err error) {
-	if filter == nil {
-		filter = emptyFilter
-	}
+func (cc *Client) Find(cl string, filter interface{}, ret interface{}, opts ...*options.FindOptions) (err error) {
 	cur, err := cc.Database(cc.DB).Collection(cl, cc.collectionOptions).Find(nil, filter, opts...)
 	if err == nil {
 		err = cur.All(nil, ret)
@@ -250,26 +239,170 @@ func (cc *Client) FindAll(cl string, filter interface{}, ret interface{}, opts .
 	return
 }
 
-func (cc *Client) FindWith(cl string, filter interface{}, fn func(cur *mongo.Cursor) error, opts ...*options.FindOptions) (err error) {
-	if filter == nil {
-		filter = emptyFilter
-	}
+func (cc *Client) FindWith(cl string, filter interface{}, with func(cur *mongo.Cursor) error, opts ...*options.FindOptions) (err error) {
 	cur, err := cc.Database(cc.DB).Collection(cl, cc.collectionOptions).Find(nil, filter, opts...)
 	if err == nil {
 		defer cur.Close(nil)
-		err = fn(cur)
+		err = with(cur)
 	}
 	return
 }
 
 func (cc *Client) Distinct(cl string, fieldName string, filter interface{}, opts ...*options.DistinctOptions) (ret []interface{}, err error) {
-	if filter == nil {
-		filter = emptyFilter
-	}
 	ret, err = cc.Database(cc.DB).Collection(cl, cc.collectionOptions).Distinct(nil, fieldName, filter, opts...)
 	return
 }
 
-func (cc *Client) FindIdAndUpdate(cl string, id interface{}, update interface{}) {
-	cc.Database(cc.DB).Collection(cl, cc.collectionOptions).FindOneAndUpdate(nil, bson.M{"_id": id}, update)
+func (cc *Client) FindIdAndUpdate(cl string, id interface{}, update interface{}, ret interface{}, opts ...*options.FindOneAndUpdateOptions) (not bool, err error) {
+	result := cc.Database(cc.DB).Collection(cl, cc.collectionOptions).FindOneAndUpdate(nil, bson.M{"_id": id}, update, opts...)
+	if ret != nil {
+		err = result.Decode(&ret)
+		if err == mongo.ErrNoDocuments {
+			not = true
+			err = nil
+		}
+	}
+	return
+}
+
+func (cc *Client) FindIdAndReplace(cl string, id interface{}, replace interface{}, ret interface{}, opts ...*options.FindOneAndReplaceOptions) (not bool, err error) {
+	result := cc.Database(cc.DB).Collection(cl, cc.collectionOptions).FindOneAndReplace(nil, bson.M{"_id": id}, replace, opts...)
+	if ret != nil {
+		err = result.Decode(&ret)
+		if err == mongo.ErrNoDocuments {
+			not = true
+			err = nil
+		}
+	}
+	return
+}
+
+func (cc *Client) FindIdAndDelete(cl string, id interface{}, ret interface{}, opts ...*options.FindOneAndDeleteOptions) (not bool, err error) {
+	result := cc.Database(cc.DB).Collection(cl, cc.collectionOptions).FindOneAndDelete(nil, bson.M{"_id": id}, opts...)
+	if ret != nil {
+		err = result.Decode(&ret)
+		if err == mongo.ErrNoDocuments {
+			not = true
+			err = nil
+		}
+	}
+	return
+}
+
+func (cc *Client) FindOneAndUpdate(cl string, filter interface{}, update interface{}, ret interface{}, opts ...*options.FindOneAndUpdateOptions) (not bool, err error) {
+	result := cc.Database(cc.DB).Collection(cl, cc.collectionOptions).FindOneAndUpdate(nil, filter, update, opts...)
+	if ret != nil {
+		err = result.Decode(&ret)
+		if err == mongo.ErrNoDocuments {
+			not = true
+			err = nil
+		}
+	}
+	return
+}
+
+func (cc *Client) FindOneAndReplace(cl string, filter interface{}, replace interface{}, ret interface{}, opts ...*options.FindOneAndReplaceOptions) (not bool, err error) {
+	result := cc.Database(cc.DB).Collection(cl, cc.collectionOptions).FindOneAndReplace(nil, filter, replace, opts...)
+	if ret != nil {
+		err = result.Decode(&ret)
+		if err == mongo.ErrNoDocuments {
+			not = true
+			err = nil
+		}
+	}
+	return
+}
+
+func (cc *Client) FindOneAndDelete(cl string, filter interface{}, ret interface{}, opts ...*options.FindOneAndDeleteOptions) (not bool, err error) {
+	result := cc.Database(cc.DB).Collection(cl, cc.collectionOptions).FindOneAndDelete(nil, filter, opts...)
+	if ret != nil {
+		err = result.Decode(&ret)
+		if err == mongo.ErrNoDocuments {
+			not = true
+			err = nil
+		}
+	}
+	return
+}
+
+func (cc *Client) InsertOne(cl string, doc interface{}, opts ...*options.InsertOneOptions) (result *mongo.InsertOneResult, err error) {
+	result, err = cc.Database(cc.DB).Collection(cl, cc.collectionOptions).InsertOne(nil, doc, opts...)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (cc *Client) InsertMany(cl string, docs []interface{}, opts ...*options.InsertManyOptions) (result *mongo.InsertManyResult, err error) {
+	result, err = cc.Database(cc.DB).Collection(cl, cc.collectionOptions).InsertMany(nil, docs, opts...)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (cc *Client) ReplaceId(cl string, id interface{}, replace interface{}, opts ...*options.ReplaceOptions) (result *mongo.UpdateResult, err error) {
+	result, err = cc.Database(cc.DB).Collection(cl, cc.collectionOptions).ReplaceOne(nil, bson.M{"_id": id}, replace, opts...)
+	return
+}
+
+func (cc *Client) ReplaceOne(cl string, filter interface{}, replace interface{}, opts ...*options.ReplaceOptions) (result *mongo.UpdateResult, err error) {
+	result, err = cc.Database(cc.DB).Collection(cl, cc.collectionOptions).ReplaceOne(nil, filter, replace, opts...)
+	return
+}
+
+func (cc *Client) UpdateId(cl string, id interface{}, update interface{}, opts ...*options.UpdateOptions) (result *mongo.UpdateResult, err error) {
+	result, err = cc.Database(cc.DB).Collection(cl, cc.collectionOptions).UpdateOne(nil, bson.M{"_id": id}, update, opts...)
+	return
+}
+
+func (cc *Client) UpdateOne(cl string, filter interface{}, update interface{}, opts ...*options.UpdateOptions) (result *mongo.UpdateResult, err error) {
+	result, err = cc.Database(cc.DB).Collection(cl, cc.collectionOptions).UpdateOne(nil, filter, update, opts...)
+	return
+}
+
+func (cc *Client) UpdateMany(cl string, filter interface{}, update interface{}, opts ...*options.UpdateOptions) (result *mongo.UpdateResult, err error) {
+	result, err = cc.Database(cc.DB).Collection(cl, cc.collectionOptions).UpdateMany(nil, filter, update, opts...)
+	return
+}
+
+func (cc *Client) DeleteId(cl string, id interface{}, update interface{}, opts ...*options.DeleteOptions) (result *mongo.DeleteResult, err error) {
+	result, err = cc.Database(cc.DB).Collection(cl, cc.collectionOptions).DeleteOne(nil, bson.M{"_id": id}, opts...)
+	return
+}
+
+func (cc *Client) DeleteOne(cl string, filter interface{}, update interface{}, opts ...*options.DeleteOptions) (result *mongo.DeleteResult, err error) {
+	result, err = cc.Database(cc.DB).Collection(cl, cc.collectionOptions).DeleteOne(nil, filter, opts...)
+	return
+}
+
+// 必须注意: empty filter会删除整个集合数据
+func (cc *Client) DeleteMany(cl string, filter interface{}, update interface{}, opts ...*options.DeleteOptions) (result *mongo.DeleteResult, err error) {
+	result, err = cc.Database(cc.DB).Collection(cl, cc.collectionOptions).DeleteMany(nil, filter, opts...)
+	return
+}
+
+func (cc *Client) Aggregate(cl string, pipeline interface{}, ret interface{}, opts ...*options.AggregateOptions) (err error) {
+	cur, err := cc.Database(cc.DB).Collection(cl, cc.collectionOptions).Aggregate(nil, pipeline, opts...)
+	if err == nil {
+		err = cur.All(nil, ret)
+	}
+	return
+}
+
+func (cc *Client) AggregateWith(cl string, pipeline interface{}, with func(cur *mongo.Cursor), opts ...*options.AggregateOptions) (err error) {
+	cur, err := cc.Database(cc.DB).Collection(cl, cc.collectionOptions).Aggregate(nil, pipeline, opts...)
+	if err == nil {
+		defer cur.Close(nil)
+		with(cur)
+	}
+	return
+}
+
+func (cc *Client) BulkWrite(cl string, models []mongo.WriteModel, opts ...*options.BulkWriteOptions) (result *mongo.BulkWriteResult, err error) {
+	if len(models) == 0 {
+		return
+	}
+	result, err = cc.Database(cc.DB).Collection(cl, cc.collectionOptions).BulkWrite(nil, models, opts...)
+	return
 }
