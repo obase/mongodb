@@ -56,7 +56,7 @@ func TestClient_Find(t *testing.T) {
 	}
 	fmt.Println(result)
 	var result2 []bson.M
-	err = mdb.Find("rtm_macro_mac", bson.M{"_id": "rUZNJrakx5QCVX8l9vGr"}, &result2, options.Find().SetProjection(bson.M{"mtime": 1}))
+	err = mdb.Find("rtm_macro_mac", bson.M{"_id": "rUZNJrakx5QCVX8l9vGr"}, &result2, options.Find().SetProjection(bson.M{"mtime": 1}).SetSkip(1).SetLimit(2).SetSort(bson.M{"code": -1}))
 	if err != nil {
 		panic(err)
 	}
