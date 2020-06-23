@@ -389,18 +389,18 @@ func (cc *Client) UpdateMany(cl string, filter interface{}, update interface{}, 
 	return
 }
 
-func (cc *Client) DeleteId(cl string, id interface{}, update interface{}, opts ...*options.DeleteOptions) (result *mongo.DeleteResult, err error) {
+func (cc *Client) DeleteId(cl string, id interface{}, opts ...*options.DeleteOptions) (result *mongo.DeleteResult, err error) {
 	result, err = cc.Database(cc.DB).Collection(cl, cc.collectionOptions).DeleteOne(nil, bson.M{"_id": id}, opts...)
 	return
 }
 
-func (cc *Client) DeleteOne(cl string, filter interface{}, update interface{}, opts ...*options.DeleteOptions) (result *mongo.DeleteResult, err error) {
+func (cc *Client) DeleteOne(cl string, filter interface{}, opts ...*options.DeleteOptions) (result *mongo.DeleteResult, err error) {
 	result, err = cc.Database(cc.DB).Collection(cl, cc.collectionOptions).DeleteOne(nil, filter, opts...)
 	return
 }
 
 // 必须注意: empty filter会删除整个集合数据
-func (cc *Client) DeleteMany(cl string, filter interface{}, update interface{}, opts ...*options.DeleteOptions) (result *mongo.DeleteResult, err error) {
+func (cc *Client) DeleteMany(cl string, filter interface{}, opts ...*options.DeleteOptions) (result *mongo.DeleteResult, err error) {
 	result, err = cc.Database(cc.DB).Collection(cl, cc.collectionOptions).DeleteMany(nil, filter, opts...)
 	return
 }
