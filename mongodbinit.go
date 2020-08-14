@@ -81,7 +81,13 @@ func init() {
 
 func GetReadPreference(val interface{}, ok bool) (*ReadPreference, bool) {
 	switch val := val.(type) {
+	case nil:
+		return nil, true
 	case string:
+		val = strings.TrimSpace(val)
+		if val == "" {
+			return nil, true
+		}
 		return &ReadPreference{RMode: val}, true
 	case map[string]interface{}:
 		return &ReadPreference{
@@ -109,7 +115,13 @@ func GetReadPreference(val interface{}, ok bool) (*ReadPreference, bool) {
 
 func GetReadConcern(val interface{}, ok bool) (*ReadConcern, bool) {
 	switch val := val.(type) {
+	case nil:
+		return nil, true
 	case string:
+		val = strings.TrimSpace(val)
+		if val == "" {
+			return nil, true
+		}
 		return &ReadConcern{Level: val}, true
 	case map[string]interface{}:
 		return &ReadConcern{
@@ -131,7 +143,13 @@ func GetReadConcern(val interface{}, ok bool) (*ReadConcern, bool) {
 
 func GetWriteConcern(val interface{}, ok bool) (*WriteConcern, bool) {
 	switch val := val.(type) {
+	case nil:
+		return nil, true
 	case string:
+		val = strings.TrimSpace(val)
+		if val == "" {
+			return nil, true
+		}
 		switch strings.ToLower(val) {
 		case WriteConcern_majority:
 			return &WriteConcern{WMajority: true}, true

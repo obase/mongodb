@@ -4,5 +4,5 @@ go 1.12
 
 require (
 	github.com/obase/conf v1.10.2
-	go.mongodb.org/mongo-driver v1.3.4
+	go.mongodb.org/mongo-driver v1.4.0
 )
